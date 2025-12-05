@@ -1,0 +1,112 @@
+{% extends "wgadmin/base.html" %}
+{% load wg_tags %}
+{% block content %}
+<div class="flex items-center justify-between">
+    <div>
+        <div class="text-2xl font-semibold">Clients</div>
+        <p class="text-slate-400 text-sm">Source: {{ wg_config_path }}</p>
+    </div>
+    <button hx-target="#create-form" class="hidden"></button>
+    <form method="post" action="{% url 'client-create' %}" class="flex items-end gap-3">
+        {% csrf_token %}
+        <div>
+            <label class="block text-sm text-slate-300 mb-1">Name</label>
+            <input name="name" required class="bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm" placeholder="client01">
+        </div>
+        <div>
+            <label class="block text-sm text-slate-300 mb-1">Allowed IPs</label>
+            <input name="allowed_ips" value="0.0.0.0/0" class="bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm w-48">
+        </div>
+        <button type="submit" class="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold rounded-lg px-4 py-2">Create</button>
+    </form>
+</div>
+
+<div class="mt-6 bg-slate-950/60 border border-slate-800 rounded-2xl overflow-hidden">
+    <table class="min-w-full">
+        <thead class="bg-slate-900/70 text-slate-300 text-sm">
+            <tr>
+                <th class="px-4 py-3 text-left font-semibold">Name</th>
+                <th class="px-4 py-3 text-left font-semibold">Public Key</th>
+                <th class="px-4 py-3 text-left font-semibold">Allowed IPs</th>
+                <th class="px-4 py-3 text-left font-semibold">Status</th>
+                <th class="px-4 py-3 text-left font-semibold">Traffic</th>
+                <th class="px-4 py-3 text-left font-semibold">Actions</th>
+            </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-800 text-sm">
+            {% for peer in peers %}
+                <tr class="hover:bg-slate-900/40">
+                    <td class="px-4 py-3 font-semibold">{{ peer.name }}</td>
+                    <td class="px-4 py-3 text-slate-300">
+                        <div class="font-mono text-xs">{{ peer.public_key|slice:":20" }}...</div>
+                    </td>
+                    <td class="px-4 py-3 text-slate-300">
+                        {{ peer.allowed_ips|join:", " }}
+                    </td>
+                    <td class="px-4 py-3">
+                        {% if peer.is_enabled %}
+                            <span class="px-2 py-1 rounded-full bg-emerald-500/20 text-emerald-200 text-xs">Enabled</span>
+                        {% else %}
+                            <span class="px-2 py-1 rounded-full bg-slate-700 text-slate-200 text-xs">Disabled</span>
+                        {% endif %}
+                        {% if peer.latest_handshake %}
+                            <div class="text-xs text-slate-400">Last handshake {{ peer.latest_handshake }}</div>
+                        {% endif %}
+                    </td>
+                    <td class="px-4 py-3 text-slate-300">
+                        {% if peer.transfer_rx %}
+                            <div class="text-xs">↓ {{ peer.transfer_rx|filesizeformat }}</div>
+                        {% endif %}
+                        {% if peer.transfer_tx %}
+                            <div class="text-xs">↑ {{ peer.transfer_tx|filesizeformat }}</div>
+                        {% endif %}
+                    </td>
+                    <td class="px-4 py-3">
+                        <div class="flex flex-wrap gap-2">
+                            <form method="post" action="{% url 'client-activate' peer.identifier %}">
+                                {% csrf_token %}
+                                <button class="px-3 py-1 rounded-lg bg-cyan-500/80 text-slate-950 text-xs font-semibold hover:bg-cyan-400" type="submit">
+                                    Activate
+                                </button>
+                            </form>
+                            {% if peer.is_enabled %}
+                                <form method="post" action="{% url 'client-disable' peer.identifier %}">
+                                    {% csrf_token %}
+                                    <button class="px-3 py-1 rounded-lg bg-amber-500/80 text-slate-950 text-xs font-semibold hover:bg-amber-400" type="submit">
+                                        Disable
+                                    </button>
+                                </form>
+                            {% else %}
+                                <form method="post" action="{% url 'client-enable' peer.identifier %}">
+                                    {% csrf_token %}
+                                    <button class="px-3 py-1 rounded-lg bg-emerald-500/80 text-slate-950 text-xs font-semibold hover:bg-emerald-400" type="submit">
+                                        Enable
+                                    </button>
+                                </form>
+                            {% endif %}
+                            <form method="post" action="{% url 'client-delete' peer.identifier %}" onsubmit="return confirm('Delete {{ peer.name }}?');">
+                                {% csrf_token %}
+                                <button class="px-3 py-1 rounded-lg bg-red-600/80 text-slate-50 text-xs font-semibold hover:bg-red-500" type="submit">
+                                    Delete
+                                </button>
+                            </form>
+                        </div>
+                        {% with token=token_map|dict_get:peer.identifier %}
+                            {% if token %}
+                                <div class="text-xs text-slate-400 mt-2">
+                                    Active link until {{ token.expires_at }}<br>
+                                    <code class="break-all text-slate-200">{{ request.build_absolute_uri|cut:request.path }}config/{{ token.token }}/</code>
+                                </div>
+                            {% endif %}
+                        {% endwith %}
+                    </td>
+                </tr>
+            {% empty %}
+                <tr>
+                    <td colspan="6" class="px-4 py-6 text-center text-slate-400">No peers found in config.</td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

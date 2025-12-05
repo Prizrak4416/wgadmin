@@ -1,0 +1,12 @@
+{
+  "name": "wireguard-admin",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build:css": "tailwindcss -i wgadmin_project/wgadmin/static/wgadmin/css/input.css -o wgadmin_project/wgadmin/static/wgadmin/css/tailwind.css --minify",
+    "watch:css": "tailwindcss -i wgadmin_project/wgadmin/static/wgadmin/css/input.css -o wgadmin_project/wgadmin/static/wgadmin/css/tailwind.css --watch"
+  },
+  "devDependencies": {
+    "tailwindcss": "next"
+  }
+}

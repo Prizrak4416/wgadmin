@@ -1,0 +1,1 @@
+# WireGuard admin Django app.

@@ -1,0 +1,11 @@
+from django import template
+
+register = template.Library()
+
+
+@register.filter
+def dict_get(d: dict, key):
+    try:
+        return d.get(key)
+    except Exception:
+        return None
