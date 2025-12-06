@@ -9,9 +9,14 @@ class ClientCreateForm(forms.Form):
 
     def clean_name(self) -> str:
         name = self.cleaned_data["name"].strip()
+        if len(name) < 3:
+            raise forms.ValidationError("Name must be at least 3 characters long.")
         if not re.match(r"^[A-Za-z0-9._-]+$", name):
             raise forms.ValidationError("Name may contain only letters, numbers, dot, dash, and underscore.")
         return name
+
+    def clean_allowed_ips(self) -> str:
+        return self.cleaned_data["allowed_ips"].strip()
 
 
 class ActivateClientForm(forms.Form):

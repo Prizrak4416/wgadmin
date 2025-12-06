@@ -52,6 +52,7 @@ fi
 log "start name=${NAME} allowed_ips=${ALLOWED_IPS} config=${WG_CONFIG_PATH}"
 
 mkdir -p "$CLIENT_DIR" "$PUBLIC_CONF_DIR" "$QR_DIR"
+[ -f "$WG_CONFIG_PATH" ] || touch "$WG_CONFIG_PATH"
 
 if [[ -f "${WG_DIR}/${NAME}_privatekey" ]]; then
   echo "{\"status\":\"error\",\"message\":\"name already exists\"}"
@@ -83,10 +84,40 @@ find_available_ip() {
   return 1
 }
 
-CLIENT_IP=$(find_available_ip)
+CLIENT_ALLOWED_IPS="${ALLOWED_IPS:-0.0.0.0/0}"
+REQUESTED_IP_RAW=$(printf "%s" "$CLIENT_ALLOWED_IPS" | cut -d',' -f1 | awk '{print $1}')
+CLIENT_IP=""
+CLIENT_CIDR=""
+
+# If the user passed a specific IP/CIDR (not the default 0.0.0.0/0), use it; otherwise auto-assign.
+if [[ -n "$REQUESTED_IP_RAW" && "$REQUESTED_IP_RAW" != "0.0.0.0/0" ]]; then
+  REQUESTED_CIDR="$REQUESTED_IP_RAW"
+  if [[ "$REQUESTED_CIDR" != */* ]]; then
+    REQUESTED_CIDR="${REQUESTED_CIDR}/32"
+  fi
+  if [[ "$REQUESTED_CIDR" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}/([0-9]{1,2})$ ]]; then
+    MASK="${BASH_REMATCH[2]}"
+    if [[ "$MASK" -eq 32 ]]; then
+      CLIENT_CIDR="$REQUESTED_CIDR"
+      CLIENT_IP="${CLIENT_CIDR%/*}"
+    fi
+  fi
+fi
+
 if [[ -z "$CLIENT_IP" ]]; then
-  echo '{"status":"error","message":"no available IPs"}'
-  log "error: no available IPs"
+  CLIENT_IP=$(find_available_ip)
+  if [[ -z "$CLIENT_IP" ]]; then
+    echo '{"status":"error","message":"no available IPs"}'
+    log "error: no available IPs"
+    exit 1
+  fi
+  CLIENT_CIDR="${CLIENT_IP}/32"
+fi
+
+CIDR_PATTERN=${CLIENT_CIDR//\//\\/}
+if grep -Eq "^[[:space:]]*AllowedIPs[[:space:]]*=[[:space:]]*${CIDR_PATTERN}([[:space:]]|$)" "$WG_CONFIG_PATH"; then
+  echo "{\"status\":\"error\",\"message\":\"IP ${CLIENT_CIDR} already in use\"}"
+  log "error: requested IP already in use ${CLIENT_CIDR}"
   exit 1
 fi
 
@@ -97,20 +128,20 @@ cat <<EOL >> "$WG_CONFIG_PATH"
 # Name: ${NAME}
 [Peer]
 PublicKey = ${CLIENT_PUBLIC_KEY}
-AllowedIPs = ${CLIENT_IP}/32
+AllowedIPs = ${CLIENT_CIDR}
 EOL
 
 generate_client_config() {
 cat <<EOL
 [Interface]
 PrivateKey = ${CLIENT_PRIVATE_KEY}
-Address = ${CLIENT_IP}/32
+Address = ${CLIENT_CIDR}
 DNS = ${DNS}
 
 [Peer]
 PublicKey = ${SERVER_PUBLIC_KEY}
 Endpoint = ${SERVER_PUBLIC_ENDPOINT}:${ENDPOINT_PORT}
-AllowedIPs = ${ALLOWED_IPS}
+AllowedIPs = ${CLIENT_ALLOWED_IPS}
 PersistentKeepalive = 20
 EOL
 }
@@ -127,7 +158,7 @@ fi
 
 systemctl restart "wg-quick@${WG_INTERFACE}.service" >/dev/null 2>&1 || true
 
-log "created peer name=${NAME} ip=${CLIENT_IP}/32 allowed_ips=${ALLOWED_IPS} config=${WG_CONFIG_PATH}"
+log "created peer name=${NAME} ip=${CLIENT_CIDR} allowed_ips=${CLIENT_ALLOWED_IPS} config=${WG_CONFIG_PATH}"
 cat <<EOF
 {
   "status": "ok",
@@ -136,7 +167,7 @@ cat <<EOF
   "config_path": "$CLIENT_CONF_PATH",
   "public_config_path": "$PUBLIC_CONF_PATH",
   "qr_path": "${QR_DIR}/${NAME}.png",
-  "allowed_ips": "$ALLOWED_IPS",
-  "address": "${CLIENT_IP}/32"
+  "allowed_ips": "$CLIENT_ALLOWED_IPS",
+  "address": "${CLIENT_CIDR}"
 }
 EOF

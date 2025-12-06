@@ -32,6 +32,8 @@ def client_list(request: HttpRequest) -> HttpResponse:
     _cleanup_tokens()
     active_tokens = ConfigDownloadToken.objects.filter(is_active=True, expires_at__gt=timezone.now())
     token_map = {token.client_identifier: token for token in active_tokens}
+    used_ips = sorted({ip for peer in peers for ip in peer.allowed_ips})
+    used_names = sorted({peer.identifier for peer in peers})
     context = {
         "peers": peers,
         "create_form": ClientCreateForm(),
@@ -40,6 +42,8 @@ def client_list(request: HttpRequest) -> HttpResponse:
         "delete_form": DeleteClientForm(),
         "token_map": token_map,
         "wg_config_path": settings.WG_CONFIG_PATH,
+        "used_ips": used_ips,
+        "used_names": used_names,
     }
     return render(request, "wgadmin/client_list.html", context)
 
@@ -52,17 +56,33 @@ def create_client(request: HttpRequest) -> HttpResponse:
     if form.is_valid():
         service = WireGuardService()
         try:
-            service.create_peer(form.cleaned_data["name"], form.cleaned_data["allowed_ips"])
+            existing_peers = service.list_peers(include_runtime=False)
         except WireGuardError as exc:
-            messages.error(request, f"Could not create client: {exc}")
+            messages.error(request, f"Unable to read existing clients: {exc}")
+            return redirect("clients")
+        requested_name = form.cleaned_data["name"]
+        used_names = {peer.identifier for peer in existing_peers}
+        if requested_name in used_names:
+            messages.error(request, f"Name already exists: {requested_name}")
+            return redirect("clients")
+        used_ips = {ip for peer in existing_peers for ip in peer.allowed_ips}
+        requested_ips = {ip.strip() for ip in form.cleaned_data["allowed_ips"].split(",") if ip.strip()}
+        duplicate_ips = sorted(used_ips.intersection(requested_ips))
+        if duplicate_ips:
+            messages.error(request, f"IP already in use: {', '.join(duplicate_ips)}")
         else:
-            AuditLog.objects.create(
-                action="create",
-                client_identifier=form.cleaned_data["name"],
-                performed_by=request.user,
-                details={"allowed_ips": form.cleaned_data["allowed_ips"]},
-            )
-            messages.success(request, f"Client {form.cleaned_data['name']} created.")
+            try:
+                service.create_peer(form.cleaned_data["name"], form.cleaned_data["allowed_ips"])
+            except WireGuardError as exc:
+                messages.error(request, f"Could not create client: {exc}")
+            else:
+                AuditLog.objects.create(
+                    action="create",
+                    client_identifier=form.cleaned_data["name"],
+                    performed_by=request.user,
+                    details={"allowed_ips": form.cleaned_data["allowed_ips"]},
+                )
+                messages.success(request, f"Client {form.cleaned_data['name']} created.")
     else:
         messages.error(request, "Invalid form submission.")
     return redirect("clients")

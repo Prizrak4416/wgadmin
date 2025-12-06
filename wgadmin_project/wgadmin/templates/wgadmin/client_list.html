@@ -11,15 +11,20 @@
         {% csrf_token %}
         <div>
             <label class="block text-sm text-slate-300 mb-1">Name</label>
-            <input name="name" required class="bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm" placeholder="client01">
+            <input id="name-input" name="name" required minlength="3" class="bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm transition-colors" placeholder="client01">
+            <p id="name-error" class="text-xs text-red-400 mt-1 invisible min-h-[1rem]">Введите уникальное имя.</p>
         </div>
         <div>
             <label class="block text-sm text-slate-300 mb-1">Allowed IPs</label>
-            <input name="allowed_ips" value="0.0.0.0/0" class="bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm w-48">
+            <input id="allowed-ips-input" name="allowed_ips" value="0.0.0.0/0" class="bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm w-48 transition-colors">
+            <p id="allowed-ips-error" class="text-xs text-red-400 mt-1 invisible min-h-[1rem]">Этот IP уже используется.</p>
         </div>
-        <button type="submit" class="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold rounded-lg px-4 py-2">Create</button>
+        <button id="create-btn" type="submit" class="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold rounded-lg px-4 py-2 transition-opacity">Create</button>
     </form>
 </div>
+
+{{ used_ips|json_script:"used-ips-data" }}
+{{ used_names|json_script:"used-names-data" }}
 
 <div class="mt-6 bg-slate-950/60 border border-slate-800 rounded-2xl overflow-hidden">
     <table class="min-w-full">
@@ -112,4 +117,62 @@
         </tbody>
     </table>
 </div>
+<script>
+(() => {
+    const usedIpsEl = document.getElementById("used-ips-data");
+    const usedNamesEl = document.getElementById("used-names-data");
+    if (!usedIpsEl || !usedNamesEl) return;
+    const usedIps = JSON.parse(usedIpsEl.textContent || "[]");
+    const usedNames = JSON.parse(usedNamesEl.textContent || "[]");
+    const input = document.getElementById("allowed-ips-input");
+    const error = document.getElementById("allowed-ips-error");
+    const submit = document.getElementById("create-btn");
+    const nameInput = document.getElementById("name-input");
+    const nameError = document.getElementById("name-error");
+    if (!input || !error || !submit || !nameInput || !nameError) return;
+
+    const baseClassesIp = input.className;
+    const baseClassesName = nameInput.className;
+
+    const hasDuplicateIp = (value) => {
+        const ips = value.split(",").map((item) => item.trim()).filter(Boolean);
+        return ips.find((ip) => usedIps.includes(ip));
+    };
+
+    const updateState = () => {
+        const duplicate = hasDuplicateIp(input.value || "");
+        const invalid = Boolean(duplicate);
+        input.className = invalid
+            ? baseClassesIp.replace("border-slate-800", "border-red-500")
+            : baseClassesIp;
+        error.classList.toggle("invisible", !invalid);
+        error.textContent = invalid ? `IP ${duplicate} уже используется.` : "";
+
+        const nameVal = (nameInput.value || "").trim();
+        const nameTaken = usedNames.includes(nameVal);
+        const nameTooShort = nameVal.length > 0 && nameVal.length < 3;
+        const nameInvalid = nameTaken || !nameVal || nameTooShort;
+        nameInput.className = nameInvalid
+            ? baseClassesName.replace("border-slate-800", "border-red-500")
+            : baseClassesName;
+        if (!nameVal) {
+            nameError.textContent = "Имя не может быть пустым.";
+        } else if (nameTooShort) {
+            nameError.textContent = "Имя должно быть не короче 3 символов.";
+        } else if (nameTaken) {
+            nameError.textContent = `Имя ${nameVal} уже используется.`;
+        }
+        nameError.classList.toggle("invisible", !nameInvalid);
+
+        const isDisabled = invalid || nameInvalid;
+        submit.disabled = isDisabled;
+        submit.classList.toggle("opacity-50", isDisabled);
+        submit.classList.toggle("cursor-not-allowed", isDisabled);
+    };
+
+    input.addEventListener("input", updateState);
+    nameInput.addEventListener("input", updateState);
+    updateState();
+})();
+</script>
 {% endblock %}
