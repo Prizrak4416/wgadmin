@@ -46,12 +46,19 @@ class WireGuardService:
         self.interface = interface or settings.WG_INTERFACE
         self.scripts_dir = Path(scripts_dir or settings.WG_SCRIPTS_DIR)
         self.client_config_dir = settings.WG_CLIENT_CONFIG_DIR
+        self.script_timeout = getattr(settings, "WG_SCRIPT_TIMEOUT", 15)
+        # Use sudo by default so scripts can run with root privileges via sudoers; can be disabled via WG_USE_SUDO.
+        self.use_sudo = getattr(settings, "WG_USE_SUDO", True)
+        self.sudo_bin = getattr(settings, "WG_SUDO_BIN", "sudo")
 
     # -------------------- Parsing --------------------
     def list_peers(self, include_runtime: bool = True) -> List[WireGuardPeer]:
         peers = self._parse_config()
         if include_runtime:
-            runtime = self._runtime_peer_map()
+            try:
+                runtime = self._runtime_peer_map()
+            except WireGuardError:
+                runtime = {}
             for peer in peers:
                 status = runtime.get(peer.public_key)
                 if status:
@@ -70,18 +77,7 @@ class WireGuardService:
         return None
 
     def _parse_config(self) -> List[WireGuardPeer]:
-        try:
-            has_file = self.config_path.exists()
-        except PermissionError as exc:
-            raise WireGuardError(f"Permission denied reading config: {self.config_path}") from exc
-
-        if not has_file:
-            raise WireGuardError(f"Config path not found: {self.config_path}")
-
-        try:
-            lines = self.config_path.read_text(encoding="utf-8").splitlines()
-        except PermissionError as exc:
-            raise WireGuardError(f"Permission denied reading config: {self.config_path}") from exc
+        lines = self._read_config_lines()
         peers: List[WireGuardPeer] = []
         i = 0
         while i < len(lines):
@@ -96,6 +92,19 @@ class WireGuardService:
                 continue
             i += 1
         return peers
+
+    def _read_config_lines(self) -> List[str]:
+        if self.use_sudo:
+            data = self._run_script("wg_read_config.sh", {}).get("config", "")
+            if not data:
+                raise WireGuardError(f"Unable to read config via script: {self.config_path}")
+            return data.splitlines()
+        try:
+            return self.config_path.read_text(encoding="utf-8").splitlines()
+        except PermissionError as exc:
+            raise WireGuardError(f"Permission denied reading config: {self.config_path}") from exc
+        except FileNotFoundError as exc:
+            raise WireGuardError(f"Config path not found: {self.config_path}") from exc
 
     def _is_peer_header(self, line: str) -> bool:
         normalized = line.lstrip("#").strip()
@@ -206,13 +215,23 @@ class WireGuardService:
     def generate_qr(self, identifier: str) -> Dict:
         return self._run_script("wg_generate_qr.sh", ["--id", identifier])
 
-    def _run_script(self, script_name: str, args: Iterable[str]) -> Dict:
+    def _run_script(self, script_name: str, args: Iterable[str] | Dict[str, str]) -> Dict:
         script_path = self.scripts_dir / script_name
         if not script_path.exists():
             raise WireGuardError(f"Script not found: {script_path}")
+        if isinstance(args, dict):
+            normalized_args: list[str] = []
+            for key, value in args.items():
+                normalized_args.extend([str(key), str(value)])
+            args = normalized_args
         cmd = [str(script_path), *args]
+        if self.use_sudo:
+            cmd = [self.sudo_bin, *cmd]
         try:
-            proc = subprocess.run(cmd, capture_output=True, text=True, check=True)
+            print(cmd)
+            proc = subprocess.run(cmd, capture_output=True, text=True, check=True, timeout=self.script_timeout)
+        except subprocess.TimeoutExpired as exc:
+            raise WireGuardScriptError(f"{script_name} timed out after {self.script_timeout}s") from exc
         except subprocess.CalledProcessError as exc:
             raise WireGuardScriptError(f"{script_name} failed: {exc.stderr}") from exc
 

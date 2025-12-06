@@ -13,3 +13,5 @@ node_modules/
 # VSCode / editor
 .vscode/
 .idea/
+/wgadmin_project/scripts/log.txt
+/wgadmin_project/scripts/temp

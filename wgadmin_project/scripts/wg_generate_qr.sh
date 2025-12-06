@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LOG_FILE="${LOG_FILE:-${SCRIPT_DIR}/log.txt}"
+log() { echo "$(date +'%Y-%m-%d %H:%M:%S%z') [wg_generate_qr] $*" >> "$LOG_FILE"; }
+
 WG_CLIENT_CONFIG_DIR="${WG_CLIENT_CONFIG_DIR:-/etc/wireguard/client}"
 WG_PUBLIC_CONF_DIR="${WG_PUBLIC_CONF_DIR:-/var/www/wireguard/conf}"
 WG_QR_DIR="${WG_QR_DIR:-/var/www/wireguard/qr}"
@@ -24,6 +28,7 @@ done
 
 if [[ -z "$IDENTIFIER" ]]; then
   echo '{"status":"error","message":"--id required"}'
+  log "error: missing --id"
   exit 1
 fi
 
@@ -34,6 +39,7 @@ fi
 
 if [[ ! -f "$CONFIG_PATH" ]]; then
   echo '{"status":"error","message":"config not found"}'
+  log "error: config not found for ${IDENTIFIER}"
   exit 1
 fi
 
@@ -47,6 +53,7 @@ else
 fi
 
 ENCODED=$(base64 -w0 "$QR_PATH")
+log "generated qr id=${IDENTIFIER} config=${CONFIG_PATH} qr=${QR_PATH}"
 cat <<EOF
 {
   "status": "ok",

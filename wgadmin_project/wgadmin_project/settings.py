@@ -83,6 +83,8 @@ WG_SCRIPTS_DIR = Path(os.environ.get("WG_SCRIPTS_DIR", BASE_DIR / "scripts"))
 WG_CLIENT_CONFIG_DIR = Path(os.environ.get("WG_CLIENT_CONFIG_DIR", "/etc/wireguard/client"))
 WG_PUBLIC_CONF_DIR = Path(os.environ.get("WG_PUBLIC_CONF_DIR", "/var/www/wireguard/conf"))
 WG_QR_DIR = Path(os.environ.get("WG_QR_DIR", "/var/www/wireguard/qr"))
+WG_USE_SUDO = os.environ.get("WG_USE_SUDO", "true").lower() == "true"
+WG_SUDO_BIN = os.environ.get("WG_SUDO_BIN", "sudo")
 
 # Tailwind build input/output for convenience
 TAILWIND_INPUT_CSS = BASE_DIR / "wgadmin" / "static" / "wgadmin" / "css" / "input.css"

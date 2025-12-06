@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LOG_FILE="${LOG_FILE:-${SCRIPT_DIR}/log.txt}"
+log() { echo "$(date +'%Y-%m-%d %H:%M:%S%z') [wg_create_peer] $*" >> "$LOG_FILE"; }
+
 WG_CONFIG_PATH="${WG_CONFIG_PATH:-/etc/wireguard/wg1.conf}"
 WG_INTERFACE="${WG_INTERFACE:-wg0}"
 WG_DIR="${WG_DIR:-/etc/wireguard}"
@@ -42,19 +46,23 @@ done
 
 if [[ -z "$NAME" ]]; then
   echo '{"status":"error","message":"--name is required"}'
+  log "error: missing --name"
   exit 1
 fi
+log "start name=${NAME} allowed_ips=${ALLOWED_IPS} config=${WG_CONFIG_PATH}"
 
 mkdir -p "$CLIENT_DIR" "$PUBLIC_CONF_DIR" "$QR_DIR"
 
 if [[ -f "${WG_DIR}/${NAME}_privatekey" ]]; then
   echo "{\"status\":\"error\",\"message\":\"name already exists\"}"
+  log "error: name ${NAME} already exists"
   exit 1
 fi
 
 SERVER_PUBLIC_KEY=$(wg show "$WG_INTERFACE" public-key 2>/dev/null || true)
 if [[ -z "$SERVER_PUBLIC_KEY" ]]; then
   echo "{\"status\":\"error\",\"message\":\"cannot read server public key\"}"
+  log "error: cannot read server public key for ${WG_INTERFACE}"
   exit 1
 fi
 
@@ -78,6 +86,7 @@ find_available_ip() {
 CLIENT_IP=$(find_available_ip)
 if [[ -z "$CLIENT_IP" ]]; then
   echo '{"status":"error","message":"no available IPs"}'
+  log "error: no available IPs"
   exit 1
 fi
 
@@ -118,6 +127,7 @@ fi
 
 systemctl restart "wg-quick@${WG_INTERFACE}.service" >/dev/null 2>&1 || true
 
+log "created peer name=${NAME} ip=${CLIENT_IP}/32 allowed_ips=${ALLOWED_IPS} config=${WG_CONFIG_PATH}"
 cat <<EOF
 {
   "status": "ok",

@@ -93,10 +93,13 @@
                         </div>
                         {% with token=token_map|dict_get:peer.identifier %}
                             {% if token %}
-                                <div class="text-xs text-slate-400 mt-2">
-                                    Active link until {{ token.expires_at }}<br>
-                                    <code class="break-all text-slate-200">{{ request.build_absolute_uri|cut:request.path }}config/{{ token.token }}/</code>
-                                </div>
+                                {% url 'public-config' token.token as activation_path %}
+                                {% with full_url=request.build_absolute_uri|add:activation_path %}
+                                    <div class="text-xs text-slate-400 mt-2">
+                                        Active link until {{ token.expires_at }}<br>
+                                        <code class="break-all text-slate-200">{{ full_url }}</code>
+                                    </div>
+                                {% endwith %}
                             {% endif %}
                         {% endwith %}
                     </td>
