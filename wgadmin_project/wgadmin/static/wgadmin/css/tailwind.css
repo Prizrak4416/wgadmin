@@ -1,5 +1,5 @@
 /* Generated CSS placeholder. Run `npm run build:css` to rebuild with Tailwind CSS 4. */
-@import url("https://cdn.jsdelivr.net/npm/tailwindcss@3.4.3/dist/tailwind.min.css");
+@import url("https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4");
 
 body {
     font-family: "Inter", system-ui, -apple-system, sans-serif;
