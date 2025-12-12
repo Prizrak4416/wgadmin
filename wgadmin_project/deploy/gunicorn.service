@@ -10,23 +10,17 @@ After=network.target
 
 [Service]
 Type=notify
-User=www-data
+User=www-admin
 Group=wgadmin
+UMask=0007
 RuntimeDirectory=gunicorn
 WorkingDirectory=/var/www/wgadmin/wgadmin_project
 
 # Environment file for secrets (create this file manually)
-EnvironmentFile=/var/www/wgadmin/.env
+EnvironmentFile=-/var/www/wgadmin/wgadmin_project/.env
 
 # Gunicorn command
-ExecStart=/var/www/wgadmin/.venv/bin/gunicorn \
-    --workers 3 \
-    --bind unix:/run/gunicorn/wgadmin.sock \
-    --access-logfile /var/log/wgadmin/access.log \
-    --error-logfile /var/log/wgadmin/error.log \
-    --capture-output \
-    --timeout 30 \
-    wgadmin_project.wsgi:application
+ExecStart=/var/www/wgadmin/.venv/bin/gunicorn --workers 3 --bind unix:/run/gunicorn/wgadmin.sock --access-logfile /var/log/wgadmin/access.log --error-logfile /var/log/wgadmin/error.log --capture-output --timeout 30 wgadmin_project.wsgi:application
 
 ExecReload=/bin/kill -s HUP $MAINPID
 KillMode=mixed

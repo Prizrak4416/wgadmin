@@ -99,7 +99,7 @@
                         {% with token=token_map|dict_get:peer.identifier %}
                             {% if token %}
                                 {% url 'public-config' token.token as activation_path %}
-                                {% with full_url=request.build_absolute_uri|add:activation_path %}
+                                {% with full_url=base_url|add:activation_path %}
                                     <div class="text-xs text-slate-400 mt-2">
                                         Active link until {{ token.expires_at }}<br>
                                         <button

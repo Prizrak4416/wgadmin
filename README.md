@@ -103,8 +103,8 @@ Create a `.env` file (see [`deploy/.env.example`](wgadmin_project/deploy/.env.ex
 | `DJANGO_SECRET_KEY` | Django secret key (**required in production**) | unsafe-secret-key |
 | `DJANGO_DEBUG` | Enable debug mode | `true` |
 | `DJANGO_ALLOWED_HOSTS` | Comma-separated allowed hosts | `localhost,127.0.0.1` |
-| `WG_CONFIG_PATH` | WireGuard config file path | `/etc/wireguard/wg1.conf` |
-| `WG_INTERFACE` | WireGuard interface name | `wg1` |
+| `WG_CONFIG_PATH` | WireGuard config file path | `/etc/wireguard/wg0.conf` |
+| `WG_INTERFACE` | WireGuard interface name | `wg0` |
 | `WG_SCRIPTS_DIR` | Scripts directory path | `<project>/scripts` |
 | `WG_CLIENT_CONFIG_DIR` | Client config storage | `/etc/wireguard/client` |
 | `WG_PUBLIC_CONF_DIR` | Downloadable configs | `/var/www/wireguard/conf` |
@@ -127,17 +127,18 @@ python3 -c 'from django.core.management.utils import get_random_secret_key; prin
 ### Quick Start (Automated)
 
 ```bash
-# 1. Clone the repository
-git clone https://github.com/your-username/wireguard_server_admin.git /var/www/wgadmin
+# 1. Clone the repository and set ownership
+sudo mkdir -p /var/www
+sudo git clone https://github.com/your-username/wireguard_server_admin.git /var/www/wgadmin
 cd /var/www/wgadmin
 
 # 2. Run the initial setup script (as root)
-sudo bash wgadmin_project/scripts/wg_first_start.sh --user www-data --interface wg1
+sudo bash wgadmin_project/scripts/wg_first_start.sh --user www-admin --interface wg0
 
 # 3. Create virtual environment and install dependencies
-python3 -m venv .venv
+sudo -u www-admin python3 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+sudo -u www-admin /var/www/wgadmin/.venv/bin/pip install -r requirements.txt
 
 # 4. Configure environment
 cp wgadmin_project/deploy/.env.example /var/www/wgadmin/.env
@@ -145,14 +146,15 @@ nano /var/www/wgadmin/.env  # Edit with your settings
 
 # 5. Initialize Django
 cd wgadmin_project
-python manage.py migrate
-python manage.py createsuperuser
-python manage.py collectstatic --noinput
+sudo -u www-admin /var/www/wgadmin/.venv/bin/python manage.py migrate
+sudo -u www-admin /var/www/wgadmin/.venv/bin/python manage.py createsuperuser
+sudo -u www-admin /var/www/wgadmin/.venv/bin/python manage.py collectstatic --noinput
 
 # 6. Set up systemd service
+sudo chown -R www-admin:wgadmin /var/www/wgadmin  # replace if you use another user/group
 sudo cp deploy/gunicorn.service /etc/systemd/system/wgadmin.service
 sudo mkdir -p /var/log/wgadmin
-sudo chown www-data:www-data /var/log/wgadmin
+sudo chown www-admin:wgadmin /var/log/wgadmin
 sudo systemctl daemon-reload
 sudo systemctl enable --now wgadmin
 
@@ -163,6 +165,10 @@ sudo rm -f /etc/nginx/sites-enabled/default  # Remove default site
 # Edit /etc/nginx/sites-available/wgadmin - update server_name and SSL paths
 sudo nginx -t
 sudo systemctl reload nginx
+
+# final
+sudo chown -R root:wgadmin /var/www/wgadmin/wgadmin_project/scripts
+sudo chmod -R 710 /var/www/wgadmin/wgadmin_project/scripts
 ```
 
 ### Step-by-Step Manual Installation
@@ -190,8 +196,8 @@ sudo sysctl -p
 # Create wgadmin group
 sudo groupadd -r wgadmin
 
-# Add www-data to the group (or your application user)
-sudo usermod -aG wgadmin www-data
+# Add www-admin to the group (or your application user)
+sudo usermod -aG wgadmin www-admin
 ```
 
 #### Step 3: Clone Repository
@@ -199,7 +205,7 @@ sudo usermod -aG wgadmin www-data
 ```bash
 sudo mkdir -p /var/www/wgadmin
 sudo git clone https://github.com/your-username/wireguard_server_admin.git /var/www/wgadmin
-sudo chown -R www-data:wgadmin /var/www/wgadmin
+sudo chown -R www-admin:wgadmin /var/www/wgadmin
 ```
 
 #### Step 4: WireGuard Setup
@@ -212,10 +218,10 @@ sudo mkdir -p /etc/wireguard/client /var/www/wireguard/{conf,qr}
 wg genkey | sudo tee /etc/wireguard/server_private.key | wg pubkey | sudo tee /etc/wireguard/server_public.key
 
 # Create WireGuard config
-sudo nano /etc/wireguard/wg1.conf
+sudo nano /etc/wireguard/wg0.conf
 ```
 
-Example `wg1.conf`:
+Example `wg0.conf`:
 
 ```ini
 [Interface]
@@ -230,9 +236,9 @@ PostDown = iptables -D FORWARD -i %i -j ACCEPT; iptables -t nat -D POSTROUTING -
 
 ```bash
 # WireGuard directories
-sudo chown root:wgadmin /etc/wireguard /etc/wireguard/wg1.conf
+sudo chown root:wgadmin /etc/wireguard /etc/wireguard/wg0.conf
 sudo chmod 750 /etc/wireguard
-sudo chmod 640 /etc/wireguard/wg1.conf
+sudo chmod 640 /etc/wireguard/wg0.conf
 
 # Client directories
 sudo chown -R root:wgadmin /etc/wireguard/client /var/www/wireguard
@@ -254,8 +260,8 @@ sudo visudo -f /etc/sudoers.d/wgadmin
 Add these lines:
 
 ```
-%wgadmin ALL=(root) NOPASSWD: /bin/systemctl restart wg-quick@wg1.service
-%wgadmin ALL=(root) NOPASSWD: /usr/bin/wg show wg1 *
+%wgadmin ALL=(root) NOPASSWD: /bin/systemctl restart wg-quick@wg0.service
+%wgadmin ALL=(root) NOPASSWD: /usr/bin/wg show wg0 *
 %wgadmin ALL=(root) NOPASSWD: /var/www/wgadmin/wgadmin_project/scripts/wg_*.sh *
 ```
 
@@ -291,7 +297,7 @@ sudo cp deploy/gunicorn.service /etc/systemd/system/wgadmin.service
 
 # Create log directory
 sudo mkdir -p /var/log/wgadmin
-sudo chown www-data:www-data /var/log/wgadmin
+sudo chown www-admin:wgadmin /var/log/wgadmin
 
 # Enable and start service
 sudo systemctl daemon-reload
@@ -335,9 +341,9 @@ sudo certbot --nginx -d your-domain.com
 #### Step 12: Start WireGuard
 
 ```bash
-sudo systemctl enable wg-quick@wg1
-sudo systemctl start wg-quick@wg1
-sudo wg show wg1
+sudo systemctl enable wg-quick@wg0
+sudo systemctl start wg-quick@wg0
+sudo wg show wg0
 ```
 
 #### Step 13: Firewall Configuration
@@ -397,7 +403,7 @@ tail -f /var/log/nginx/wgadmin_access.log
 tail -f /var/log/nginx/wgadmin_error.log
 
 # WireGuard status
-sudo wg show wg1
+sudo wg show wg0
 ```
 
 ### Log Locations
@@ -486,7 +492,7 @@ All scripts are in [`wgadmin_project/scripts/`](wgadmin_project/scripts/) and ou
 Initial server provisioning (run once as root):
 
 ```bash
-sudo ./wg_first_start.sh --user www-data --interface wg1
+sudo ./wg_first_start.sh --user www-admin --interface wg0
 ```
 
 ### wg_create_peer.sh
@@ -581,7 +587,7 @@ The provided nginx config includes:
 
 ```bash
 # Verify user is in wgadmin group
-groups www-data
+groups www-admin
 
 # Re-login or use newgrp
 newgrp wgadmin
@@ -594,13 +600,13 @@ sudo visudo -cf /etc/sudoers.d/wgadmin
 
 ```bash
 # Check config syntax
-sudo wg-quick strip wg1
+sudo wg-quick strip wg0
 
 # View service logs
-sudo journalctl -u wg-quick@wg1 -e
+sudo journalctl -u wg-quick@wg0 -e
 
 # Check interface exists
-ip link show wg1
+ip link show wg0
 ```
 
 #### Gunicorn socket not found

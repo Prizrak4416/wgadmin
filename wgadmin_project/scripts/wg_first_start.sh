@@ -5,7 +5,7 @@
 # This script prepares the system for running the Django WireGuard Admin application.
 # It should be run ONCE on a fresh Debian 12 or Debian 13 server with root privileges.
 #
-# Usage: sudo ./wg_first_start.sh [--user USERNAME] [--interface wg1]
+# Usage: sudo ./wg_first_start.sh [--user USERNAME] [--interface wg0]
 #
 # Prerequisites:
 #   - Debian 12/13 fresh install
@@ -21,16 +21,19 @@ readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly LOG_FILE="${LOG_FILE:-/var/log/wgadmin_setup.log}"
 
 # Defaults - can be overridden via CLI or environment
-WG_USER="${WG_USER:-prizrak}"
+WG_USER="${WG_USER:-www-admin}"
 WG_GROUP="${WG_GROUP:-wgadmin}"
-WG_INTERFACE="${WG_INTERFACE:-wg1}"
+WG_INTERFACE="${WG_INTERFACE:-wg0}"
 WG_DIR="${WG_DIR:-/etc/wireguard}"
 WG_CLIENT_CONFIG_DIR="${WG_CLIENT_CONFIG_DIR:-/etc/wireguard/client}"
 WG_PUBLIC_CONF_DIR="${WG_PUBLIC_CONF_DIR:-/var/www/wireguard/conf}"
 WG_QR_DIR="${WG_QR_DIR:-/var/www/wireguard/qr}"
+WG_LOG_DIR="${WG_LOG_DIR:-/var/log/wgadmin}"
 WG_ENDPOINT_PORT="${WG_ENDPOINT_PORT:-51830}"
 # External interface used for NAT; auto-detected later if not set
 WG_PUBLIC_INTERFACE="${WG_PUBLIC_INTERFACE:-}"
+# Home directory for the application user (used if the user is auto-created)
+APP_HOME="${APP_HOME:-/var/www/wgadmin}"
 
 # Derived paths
 WG_CONFIG_PATH="${WG_DIR}/${WG_INTERFACE}.conf"
@@ -66,8 +69,8 @@ usage() {
 Usage: $0 [OPTIONS]
 
 Options:
-    --user USERNAME     User that runs the Django application (default: prizrak)
-    --interface NAME    WireGuard interface name (default: wg1)
+    --user USERNAME     User that runs the Django application (default: www-admin)
+    --interface NAME    WireGuard interface name (default: wg0)
     --public-interface  External interface for NAT (auto-detected if omitted)
     --help              Show this help message
 
@@ -76,11 +79,12 @@ Environment variables:
     WG_GROUP            System group for WireGuard access (default: wgadmin)
     WG_INTERFACE        Same as --interface
     WG_PUBLIC_INTERFACE External interface for NAT (auto-detected if not set)
+    APP_HOME            Home directory if auto-creating WG_USER (default: /var/www/wgadmin)
     WG_DIR              WireGuard configuration directory (default: /etc/wireguard)
     WG_ENDPOINT_PORT    WireGuard listen port (default: 51830)
 
 Example:
-    sudo $0 --user www-data --interface wg1
+    sudo $0 --user www-admin --interface wg0
 EOF
 }
 
@@ -213,9 +217,13 @@ setup_user_and_group() {
         log_info "Group ${WG_GROUP} already exists."
     fi
 
-    # Verify user exists
+    # Verify user exists or create a system user if missing
     if ! id "${WG_USER}" >/dev/null 2>&1; then
-        die "User ${WG_USER} does not exist. Please create it first or specify a different user with --user"
+        log_warn "User ${WG_USER} does not exist. Creating system user with home ${APP_HOME}"
+        mkdir -p "${APP_HOME}"
+        useradd -r -d "${APP_HOME}" -s /usr/sbin/nologin -g "${WG_GROUP}" -M "${WG_USER}" || die "Failed to create user ${WG_USER}"
+        chown "${WG_USER}:${WG_GROUP}" "${APP_HOME}" || true
+        log_info "Created system user: ${WG_USER}"
     fi
 
     log_info "Adding user ${WG_USER} to group ${WG_GROUP}"
@@ -234,6 +242,7 @@ setup_directories() {
         "${WG_CLIENT_CONFIG_DIR}"
         "${WG_PUBLIC_CONF_DIR}"
         "${WG_QR_DIR}"
+        "${WG_LOG_DIR}"
         "${TEMP_DIR}"
     )
 
@@ -312,19 +321,9 @@ setup_permissions() {
     chown root:"${WG_GROUP}" "${TEMP_DIR}"
     chmod 770 "${TEMP_DIR}"
 
-    # Scripts directory permissions
-    if [[ -d "${SCRIPT_DIR}" ]]; then
-        chown root:"${WG_GROUP}" "${SCRIPT_DIR}"
-        chmod 750 "${SCRIPT_DIR}"
-        
-        # Individual scripts - executable by group
-        for script in "${SCRIPT_DIR}"/*.sh; do
-            if [[ -f "${script}" ]]; then
-                chown root:"${WG_GROUP}" "${script}"
-                chmod 750 "${script}"
-            fi
-        done
-    fi
+    # Application log directory - owned by app user, group writable
+    chown "${WG_USER}:${WG_GROUP}" "${WG_LOG_DIR}"
+    chmod 775 "${WG_LOG_DIR}"
 
     log_info "Permissions configured successfully."
 }
@@ -450,9 +449,10 @@ Configuration Summary:
   - Client configs: ${WG_CLIENT_CONFIG_DIR}
   - Public configs: ${WG_PUBLIC_CONF_DIR}
   - QR codes: ${WG_QR_DIR}
+  - App logs: ${WG_LOG_DIR}
   - Scripts: ${SCRIPT_DIR}
   - Sudoers: ${SUDOERS_FILE}
-  - Log file: ${LOG_FILE}
+  - Setup log: ${LOG_FILE}
 
 Server Information:
   - IP: ${server_ip}
@@ -472,6 +472,28 @@ IMPORTANT NOTES:
 
 ================================================================================
 EOF
+}
+
+# ============================================================================
+# SETUP FOLDER
+# ============================================================================
+setup_folder() {
+    chown -R "${WG_USER}:${WG_GROUP}" "${APP_HOME}"
+
+    # Scripts directory permissions
+    if [[ -d "${SCRIPT_DIR}" ]]; then
+        chown root:"${WG_GROUP}" "${SCRIPT_DIR}"
+        chmod 750 "${SCRIPT_DIR}"
+        
+        # Individual scripts - executable by group
+        for script in "${SCRIPT_DIR}"/*.sh; do
+            if [[ -f "${script}" ]]; then
+                chown root:"${WG_GROUP}" "${script}"
+                chmod 750 "${script}"
+            fi
+        done
+    fi
+
 }
 
 # ============================================================================
@@ -501,6 +523,7 @@ main() {
     setup_wireguard_service
     setup_firewall
     print_summary
+    setup_folder
 
     log_info "Setup completed successfully."
 }

@@ -12,7 +12,7 @@ if [[ "$EUID" -eq 0 ]]; then
   RUN_AS_ROOT=true
 fi
 
-WG_CONFIG_PATH="${WG_CONFIG_PATH:-/etc/wireguard/wg1.conf}"
+WG_CONFIG_PATH="${WG_CONFIG_PATH:-/etc/wireguard/wg0.conf}"
 WG_DIR="${WG_DIR:-/etc/wireguard}"
 CLIENT_DIR="${WG_CLIENT_CONFIG_DIR:-/etc/wireguard/client}"
 PUBLIC_CONF_DIR="${WG_PUBLIC_CONF_DIR:-/var/www/wireguard/conf}"

@@ -48,6 +48,7 @@ def client_list(request: HttpRequest) -> HttpResponse:
     token_map = {token.client_identifier: token for token in active_tokens}
     used_ips = sorted({ip for peer in peers for ip in peer.allowed_ips})
     used_names = sorted({peer.identifier for peer in peers})
+    base_url = request.build_absolute_uri("/")[:-1]  # remove trailing slash
     context = {
         "peers": peers,
         "create_form": ClientCreateForm(),
@@ -58,6 +59,7 @@ def client_list(request: HttpRequest) -> HttpResponse:
         "wg_config_path": settings.WG_CONFIG_PATH,
         "used_ips": used_ips,
         "used_names": used_names,
+        "base_url": base_url,
     }
     return render(request, "wgadmin/client_list.html", context)
 

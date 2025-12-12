@@ -5,7 +5,7 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 LOG_FILE="${LOG_FILE:-${SCRIPT_DIR}/log.txt}"
 log() { echo "$(date +'%Y-%m-%d %H:%M:%S%z') [wg_read_config] $*" >> "$LOG_FILE"; }
 
-WG_CONFIG_PATH="${WG_CONFIG_PATH:-/etc/wireguard/wg1.conf}"
+WG_CONFIG_PATH="${WG_CONFIG_PATH:-/etc/wireguard/wg0.conf}"
 
 if [[ ! -f "$WG_CONFIG_PATH" ]]; then
   echo '{"status":"error","message":"config not found"}'

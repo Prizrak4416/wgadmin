@@ -29,8 +29,8 @@ env = environ.Env(
     TRUST_PROXY_HEADERS=(bool, False),
     CSRF_TRUSTED_ORIGINS=(list, []),
     # WireGuard
-    WG_CONFIG_PATH=(str, "/etc/wireguard/wg1.conf"),
-    WG_INTERFACE=(str, "wg1"),
+    WG_CONFIG_PATH=(str, "/etc/wireguard/wg0.conf"),
+    WG_INTERFACE=(str, "wg0"),
     WG_SCRIPTS_DIR=(str, ""),
     WG_CLIENT_CONFIG_DIR=(str, "/etc/wireguard/client"),
     WG_PUBLIC_CONF_DIR=(str, "/var/www/wireguard/conf"),

@@ -14,13 +14,13 @@ set -euo pipefail
 # ============================================================================
 
 # User that will run the Django application
-WG_USER="volma"
+WG_USER="www-admin"
 
 # System group for WireGuard access
 WG_GROUP="wgadmin"
 
 # WireGuard interface name
-WG_INTERFACE="wg1"
+WG_INTERFACE="wg0"
 
 # ============================================================================
 # PATHS
@@ -75,6 +75,7 @@ setup_permissions() {
 
     # WireGuard directory
     [[ -d "${WG_DIR}" ]] || die "WireGuard dir not found: ${WG_DIR}"
+    chown root:"${WG_GROUP}" "${WG_DIR}"
     chmod 750 "${WG_DIR}"
 
     # Main config file

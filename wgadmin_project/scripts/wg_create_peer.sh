@@ -5,8 +5,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LOG_FILE="${LOG_FILE:-${SCRIPT_DIR}/log.txt}"
 log() { echo "$(date +'%Y-%m-%d %H:%M:%S%z') [wg_create_peer] $*" >> "$LOG_FILE"; }
 
-WG_CONFIG_PATH="${WG_CONFIG_PATH:-/etc/wireguard/wg1.conf}"
-WG_INTERFACE="${WG_INTERFACE:-wg1}"
+WG_CONFIG_PATH="${WG_CONFIG_PATH:-/etc/wireguard/wg0.conf}"
+WG_INTERFACE="${WG_INTERFACE:-wg0}"
 WG_DIR="${WG_DIR:-/etc/wireguard}"
 WG_GROUP="${WG_GROUP:-wgadmin}"
 CLIENT_DIR="${WG_CLIENT_CONFIG_DIR:-/etc/wireguard/client}"
@@ -23,7 +23,7 @@ usage() {
   cat <<EOF
 Usage: $0 --name <client-name> [--allowed-ips <ips>]
 Environment:
-  WG_CONFIG_PATH      Path to wg1.conf (default /etc/wireguard/wg1.conf)
+  WG_CONFIG_PATH      Path to wg0.conf (default /etc/wireguard/wg0.conf)
   WG_GROUP            Group owning WireGuard files (default wgadmin)
   WG_CLIENT_CONFIG_DIR  Path to store client configs (default /etc/wireguard/client)
   WG_PUBLIC_CONF_DIR    Public conf export dir (default /var/www/wireguard/conf)
