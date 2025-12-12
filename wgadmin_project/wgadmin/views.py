@@ -1,8 +1,10 @@
 import base64
 import logging
+import os
 import re
 from datetime import timedelta
 from io import BytesIO
+from ipaddress import IPv4Network, ip_network
 from typing import Any, Dict
 
 import qrcode
@@ -20,8 +22,8 @@ from .services.wireguard import WireGuardError, WireGuardService
 
 logger = logging.getLogger(__name__)
 
-# Security: Pattern for valid identifiers (alphanumeric, dot, dash, underscore)
-IDENTIFIER_PATTERN = re.compile(r"^[A-Za-z0-9._-]+$")
+# Security: Pattern for valid identifiers (alphanumeric, dot, dash, underscore, plus, equals)
+IDENTIFIER_PATTERN = re.compile(r"^[A-Za-z0-9._+=-]+$")
 
 
 def _validate_identifier(identifier: str) -> bool:
@@ -34,24 +36,77 @@ def staff_required(view_func):
     return decorated
 
 
-@staff_required
-def client_list(request: HttpRequest) -> HttpResponse:
-    service = WireGuardService()
+def _safe_list_peers(request: HttpRequest, service: WireGuardService, include_runtime: bool = True):
     try:
-        peers = service.list_peers(include_runtime=True)
+        return service.list_peers(include_runtime=include_runtime)
     except WireGuardError as exc:
         logger.error("Failed to read WireGuard config: %s", exc)
         messages.error(request, "Unable to read WireGuard configuration. Please check server logs.")
-        peers = []
+        return []
+
+
+def get_suggested_allowed_ips(existing_ips: set[str]) -> str:
+    """Return the next available /32 address based on config data or env prefix."""
+    def _normalize_prefix(raw_prefix: str) -> str:
+        raw_prefix = (raw_prefix or "").strip()
+        if not raw_prefix:
+            return ""
+        try:
+            network = ip_network(raw_prefix if "/" in raw_prefix else f"{raw_prefix}/24", strict=False)
+            if isinstance(network, IPv4Network):
+                parts = str(network.network_address).split(".")
+                return ".".join(parts[:3]) + "."
+        except ValueError:
+            pass
+        parts = raw_prefix.split(".")
+        if len(parts) >= 3:
+            return ".".join(parts[:3]) + "."
+        return ""
+
+    prefix = _normalize_prefix(os.environ.get("SERVER_WG_IPV4_PREFIX", ""))
+    ipv4_networks: list[IPv4Network] = []
+    for raw_ip in existing_ips:
+        try:
+            network = ip_network(raw_ip, strict=False)
+        except ValueError:
+            continue
+        if isinstance(network, IPv4Network):
+            ipv4_networks.append(network)
+            if not prefix:
+                prefix = _normalize_prefix(str(network.network_address))
+    if not prefix:
+        prefix = _normalize_prefix("10.0.0.")
+
+    used_values = {f"{net.network_address}/{net.prefixlen}" for net in ipv4_networks}
+    for host in range(2, 255):
+        candidate = f"{prefix}{host}/32"
+        if candidate not in used_values:
+            return candidate
+    return f"{prefix}2/32"
+
+
+def _build_client_context(
+    request: HttpRequest,
+    service: WireGuardService,
+    peers,
+    create_form: ClientCreateForm | None = None,
+) -> Dict[str, Any]:
+    used_ips = sorted({ip for peer in peers for ip in peer.allowed_ips})
+    used_names = sorted({peer.identifier for peer in peers})
+    suggested_allowed_ips = get_suggested_allowed_ips(set(used_ips))
+    if create_form is None:
+        create_form = ClientCreateForm(
+            initial={"allowed_ips": suggested_allowed_ips},
+            used_ips=used_ips,
+            used_names=used_names,
+        )
     _cleanup_tokens()
     active_tokens = ConfigDownloadToken.objects.filter(is_active=True, expires_at__gt=timezone.now())
     token_map = {token.client_identifier: token for token in active_tokens}
-    used_ips = sorted({ip for peer in peers for ip in peer.allowed_ips})
-    used_names = sorted({peer.identifier for peer in peers})
     base_url = request.build_absolute_uri("/")[:-1]  # remove trailing slash
-    context = {
+    return {
         "peers": peers,
-        "create_form": ClientCreateForm(),
+        "create_form": create_form,
         "activate_form": ActivateClientForm(),
         "toggle_form": ToggleClientForm(),
         "delete_form": DeleteClientForm(),
@@ -61,6 +116,13 @@ def client_list(request: HttpRequest) -> HttpResponse:
         "used_names": used_names,
         "base_url": base_url,
     }
+
+
+@staff_required
+def client_list(request: HttpRequest) -> HttpResponse:
+    service = WireGuardService()
+    peers = _safe_list_peers(request, service, include_runtime=True)
+    context = _build_client_context(request, service, peers)
     return render(request, "wgadmin/client_list.html", context)
 
 
@@ -68,42 +130,37 @@ def client_list(request: HttpRequest) -> HttpResponse:
 def create_client(request: HttpRequest) -> HttpResponse:
     if request.method != "POST":
         raise Http404()
-    form = ClientCreateForm(request.POST)
+    service = WireGuardService()
+    peers = _safe_list_peers(request, service, include_runtime=False)
+    used_ips = {ip for peer in peers for ip in peer.allowed_ips}
+    used_names = {peer.identifier for peer in peers}
+
+    form = ClientCreateForm(request.POST, used_ips=used_ips, used_names=used_names)
     if form.is_valid():
-        service = WireGuardService()
         try:
-            existing_peers = service.list_peers(include_runtime=False)
+            service.create_peer(form.cleaned_data["name"], form.cleaned_data["allowed_ips"])
         except WireGuardError as exc:
-            logger.error("Failed to read existing clients: %s", exc)
-            messages.error(request, "Unable to read existing clients. Please check server logs.")
-            return redirect("clients")
-        requested_name = form.cleaned_data["name"]
-        used_names = {peer.identifier for peer in existing_peers}
-        if requested_name in used_names:
-            messages.error(request, f"Name already exists: {requested_name}")
-            return redirect("clients")
-        used_ips = {ip for peer in existing_peers for ip in peer.allowed_ips}
-        requested_ips = {ip.strip() for ip in form.cleaned_data["allowed_ips"].split(",") if ip.strip()}
-        duplicate_ips = sorted(used_ips.intersection(requested_ips))
-        if duplicate_ips:
-            messages.error(request, f"IP already in use: {', '.join(duplicate_ips)}")
-        else:
-            try:
-                service.create_peer(form.cleaned_data["name"], form.cleaned_data["allowed_ips"])
-            except WireGuardError as exc:
-                logger.error("Failed to create client %s: %s", form.cleaned_data["name"], exc)
-                messages.error(request, "Could not create client. Please check server logs.")
+            logger.error("Failed to create client %s: %s", form.cleaned_data["name"], exc)
+            message = str(exc)
+            lowered = message.lower()
+            if "already in use" in lowered:
+                form.add_error("allowed_ips", "IP already in use.")
+            elif "name" in lowered and "exists" in lowered:
+                form.add_error("name", "Name already exists.")
             else:
-                AuditLog.objects.create(
-                    action="create",
-                    client_identifier=form.cleaned_data["name"],
-                    performed_by=request.user,
-                    details={"allowed_ips": form.cleaned_data["allowed_ips"]},
-                )
-                messages.success(request, f"Client {form.cleaned_data['name']} created.")
-    else:
-        messages.error(request, "Invalid form submission.")
-    return redirect("clients")
+                messages.error(request, "Could not create client. Please check server logs.")
+        else:
+            AuditLog.objects.create(
+                action="create",
+                client_identifier=form.cleaned_data["name"],
+                performed_by=request.user,
+                details={"allowed_ips": form.cleaned_data["allowed_ips"]},
+            )
+            messages.success(request, f"Client {form.cleaned_data['name']} created.")
+            return redirect("clients")
+
+    context = _build_client_context(request, service, peers, create_form=form)
+    return render(request, "wgadmin/client_list.html", context, status=400)
 
 
 @staff_required

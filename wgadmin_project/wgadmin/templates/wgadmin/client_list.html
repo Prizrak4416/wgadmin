@@ -7,20 +7,55 @@
         <p class="text-slate-400 text-sm">Source: {{ wg_config_path }}</p>
     </div>
     <button hx-target="#create-form" class="hidden"></button>
-    <form method="post" action="{% url 'client-create' %}" class="flex items-end gap-3">
-        {% csrf_token %}
-        <div>
-            <label class="block text-sm text-slate-300 mb-1">Name</label>
-            <input id="name-input" name="name" required minlength="3" class="bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm transition-colors" placeholder="client01">
-            <p id="name-error" class="text-xs text-red-400 mt-1 invisible min-h-[1rem]">Введите уникальное имя.</p>
-        </div>
-        <div>
-            <label class="block text-sm text-slate-300 mb-1">Allowed IPs</label>
-            <input id="allowed-ips-input" name="allowed_ips" value="0.0.0.0/0" class="bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm w-48 transition-colors">
-            <p id="allowed-ips-error" class="text-xs text-red-400 mt-1 invisible min-h-[1rem]">Этот IP уже используется.</p>
-        </div>
-        <button id="create-btn" type="submit" class="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold rounded-lg px-4 py-2 transition-opacity">Create</button>
-    </form>
+    {% with name_base_class="bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm transition-colors" ip_base_class="bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm w-48 transition-colors" %}
+        <form method="post" action="{% url 'client-create' %}" class="flex items-end gap-3">
+            {% csrf_token %}
+            <div>
+                <label class="block text-sm text-slate-300 mb-1">Name</label>
+                {% with name_error=create_form.errors.name %}
+                    <input
+                        id="name-input"
+                        name="name"
+                        required
+                        minlength="3"
+                        value="{{ create_form.name.value|default_if_none:'' }}"
+                        class="{{ name_base_class }} {% if name_error %}border-red-500{% endif %}"
+                        placeholder="client01"
+                        data-base-class="{{ name_base_class }}"
+                        data-server-invalid="{% if name_error %}true{% else %}false{% endif %}"
+                        data-server-value="{{ create_form.name.value|default_if_none:'' }}">
+                    <p
+                        id="name-error"
+                        class="text-xs text-red-400 mt-1 {% if name_error %}{% else %}invisible{% endif %} min-h-[1rem]"
+                        data-default-message="Введите уникальное имя."
+                        data-server-message="{% if name_error %}{{ name_error.0 }}{% endif %}">
+                        {% if name_error %}{{ name_error.0 }}{% else %}Введите уникальное имя.{% endif %}
+                    </p>
+                {% endwith %}
+            </div>
+            <div>
+                <label class="block text-sm text-slate-300 mb-1">Allowed IPs</label>
+                {% with ip_error=create_form.errors.allowed_ips %}
+                    <input
+                        id="allowed-ips-input"
+                        name="allowed_ips"
+                        value="{{ create_form.allowed_ips.value|default_if_none:'' }}"
+                        class="{{ ip_base_class }} {% if ip_error %}border-red-500{% endif %}"
+                        data-base-class="{{ ip_base_class }}"
+                        data-server-invalid="{% if ip_error %}true{% else %}false{% endif %}"
+                        data-server-value="{{ create_form.allowed_ips.value|default_if_none:'' }}">
+                    <p
+                        id="allowed-ips-error"
+                        class="text-xs text-red-400 mt-1 {% if ip_error %}{% else %}invisible{% endif %} min-h-[1rem]"
+                        data-default-message="Этот IP уже используется."
+                        data-server-message="{% if ip_error %}{{ ip_error.0 }}{% endif %}">
+                        {% if ip_error %}{{ ip_error.0 }}{% else %}Этот IP уже используется.{% endif %}
+                    </p>
+                {% endwith %}
+            </div>
+            <button id="create-btn" type="submit" class="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold rounded-lg px-4 py-2 transition-opacity">Create</button>
+        </form>
+    {% endwith %}
 </div>
 
 {{ used_ips|json_script:"used-ips-data" }}
@@ -137,47 +172,101 @@
     const nameError = document.getElementById("name-error");
     if (!input || !error || !submit || !nameInput || !nameError) return;
 
-    const baseClassesIp = input.className;
-    const baseClassesName = nameInput.className;
+    const baseClassesIp = input.dataset.baseClass || input.className;
+    const baseClassesName = nameInput.dataset.baseClass || nameInput.className;
+    const errorClassesIp = baseClassesIp.replace("border-slate-800", "border-red-500");
+    const errorClassesName = baseClassesName.replace("border-slate-800", "border-red-500");
+    const serverIpValue = input.dataset.serverValue || "";
+    const serverNameValue = nameInput.dataset.serverValue || "";
+    const namePattern = /^[A-Za-z0-9._-]+$/;
+
+    const debounce = (fn, delay = 300) => {
+        let timer;
+        return (...args) => {
+            clearTimeout(timer);
+            timer = setTimeout(() => fn(...args), delay);
+        };
+    };
 
     const hasDuplicateIp = (value) => {
         const ips = value.split(",").map((item) => item.trim()).filter(Boolean);
         return ips.find((ip) => usedIps.includes(ip));
     };
 
-    const updateState = () => {
-        const duplicate = hasDuplicateIp(input.value || "");
-        const invalid = Boolean(duplicate);
-        input.className = invalid
-            ? baseClassesIp.replace("border-slate-800", "border-red-500")
-            : baseClassesIp;
-        error.classList.toggle("invisible", !invalid);
-        error.textContent = invalid ? `IP ${duplicate} уже используется.` : "";
-
-        const nameVal = (nameInput.value || "").trim();
-        const nameTaken = usedNames.includes(nameVal);
-        const nameTooShort = nameVal.length > 0 && nameVal.length < 3;
-        const nameInvalid = nameTaken || !nameVal || nameTooShort;
-        nameInput.className = nameInvalid
-            ? baseClassesName.replace("border-slate-800", "border-red-500")
-            : baseClassesName;
-        if (!nameVal) {
-            nameError.textContent = "Имя не может быть пустым.";
-        } else if (nameTooShort) {
-            nameError.textContent = "Имя должно быть не короче 3 символов.";
-        } else if (nameTaken) {
-            nameError.textContent = `Имя ${nameVal} уже используется.`;
+    const evaluateIps = () => {
+        const value = (input.value || "").trim();
+        let invalid = false;
+        let message = "";
+        const duplicate = hasDuplicateIp(value);
+        if (duplicate) {
+            invalid = true;
+            message = `IP ${duplicate} уже используется.`;
+        } else if (input.dataset.serverInvalid === "true" && value === serverIpValue) {
+            invalid = true;
+            message = error.dataset.serverMessage || error.dataset.defaultMessage || "";
         }
-        nameError.classList.toggle("invisible", !nameInvalid);
+        if (input.dataset.serverInvalid === "true" && value !== serverIpValue) {
+            input.dataset.serverInvalid = "false";
+            error.dataset.serverMessage = "";
+        }
+        return { invalid, message };
+    };
 
-        const isDisabled = invalid || nameInvalid;
+    const evaluateName = () => {
+        const value = (nameInput.value || "").trim();
+        let invalid = false;
+        let message = "";
+        if (!value) {
+            invalid = true;
+            message = "Имя не может быть пустым.";
+        } else if (value.length < 3) {
+            invalid = true;
+            message = "Имя должно быть не короче 3 символов.";
+        } else if (!namePattern.test(value)) {
+            invalid = true;
+            message = "Имя может содержать только буквы, цифры, точку, тире и подчеркивание.";
+        } else if (usedNames.includes(value)) {
+            invalid = true;
+            message = `Имя ${value} уже используется.`;
+        } else if (nameInput.dataset.serverInvalid === "true" && value === serverNameValue) {
+            invalid = true;
+            message = nameError.dataset.serverMessage || nameError.dataset.defaultMessage || "";
+        }
+        if (nameInput.dataset.serverInvalid === "true" && value !== serverNameValue) {
+            nameInput.dataset.serverInvalid = "false";
+            nameError.dataset.serverMessage = "";
+        }
+        return { invalid, message };
+    };
+
+    const updateState = () => {
+        const ipState = evaluateIps();
+        input.className = ipState.invalid ? errorClassesIp : baseClassesIp;
+        if (ipState.message) {
+            error.textContent = ipState.message;
+        } else if (!ipState.invalid) {
+            error.textContent = error.dataset.defaultMessage || "";
+        }
+        error.classList.toggle("invisible", !ipState.invalid);
+
+        const nameState = evaluateName();
+        nameInput.className = nameState.invalid ? errorClassesName : baseClassesName;
+        if (nameState.message) {
+            nameError.textContent = nameState.message;
+        } else if (!nameState.invalid) {
+            nameError.textContent = nameError.dataset.defaultMessage || "";
+        }
+        nameError.classList.toggle("invisible", !nameState.invalid);
+
+        const isDisabled = ipState.invalid || nameState.invalid;
         submit.disabled = isDisabled;
         submit.classList.toggle("opacity-50", isDisabled);
         submit.classList.toggle("cursor-not-allowed", isDisabled);
     };
 
-    input.addEventListener("input", updateState);
-    nameInput.addEventListener("input", updateState);
+    const debouncedUpdate = debounce(updateState, 300);
+    input.addEventListener("input", debouncedUpdate);
+    nameInput.addEventListener("input", debouncedUpdate);
     updateState();
 })();
 

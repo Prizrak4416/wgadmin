@@ -122,11 +122,19 @@ python3 -c 'from django.core.management.utils import get_random_secret_key; prin
 
 ---
 
-## Installation on Fresh Debian 12 Server
+## License
+
+This project is licensed under the MIT License. See `LICENSE` for details.
+
+---
+
+## Installation on Fresh Debian 12/13 Server
 
 ### Quick Start (Automated)
 
 ```bash
+sudo apt update && sudo apt upgrade -y
+
 # 1. Clone the repository and set ownership
 sudo mkdir -p /var/www
 sudo git clone https://github.com/your-username/wireguard_server_admin.git /var/www/wgadmin
@@ -137,12 +145,11 @@ sudo bash wgadmin_project/scripts/wg_first_start.sh --user www-admin --interface
 
 # 3. Create virtual environment and install dependencies
 sudo -u www-admin python3 -m venv .venv
-source .venv/bin/activate
 sudo -u www-admin /var/www/wgadmin/.venv/bin/pip install -r requirements.txt
 
 # 4. Configure environment
 cp wgadmin_project/deploy/.env.example /var/www/wgadmin/.env
-nano /var/www/wgadmin/.env  # Edit with your settings
+nano /var/www/wgadmin/.env
 
 # 5. Initialize Django
 cd wgadmin_project
@@ -151,7 +158,11 @@ sudo -u www-admin /var/www/wgadmin/.venv/bin/python manage.py createsuperuser
 sudo -u www-admin /var/www/wgadmin/.venv/bin/python manage.py collectstatic --noinput
 
 # 6. Set up systemd service
-sudo chown -R www-admin:wgadmin /var/www/wgadmin  # replace if you use another user/group
+sudo chown -R www-admin:wgadmin /var/www/wgadmin
+sudo find /var/www/wgadmin -type d -exec chmod 2770 {} \;
+sudo find /var/www/wgadmin -type f -exec chmod 660 {} \;
+sudo chmod 770 /var/www/wgadmin/.venv/bin/gunicorn /var/www/wgadmin/.venv/bin/python
+
 sudo cp deploy/gunicorn.service /etc/systemd/system/wgadmin.service
 sudo mkdir -p /var/log/wgadmin
 sudo chown www-admin:wgadmin /var/log/wgadmin
@@ -161,7 +172,7 @@ sudo systemctl enable --now wgadmin
 # 7. Configure nginx
 sudo cp deploy/nginx.conf /etc/nginx/sites-available/wgadmin
 sudo ln -s /etc/nginx/sites-available/wgadmin /etc/nginx/sites-enabled/
-sudo rm -f /etc/nginx/sites-enabled/default  # Remove default site
+sudo rm -f /etc/nginx/sites-enabled/default
 # Edit /etc/nginx/sites-available/wgadmin - update server_name and SSL paths
 sudo nginx -t
 sudo systemctl reload nginx
@@ -171,219 +182,6 @@ sudo chown -R root:wgadmin /var/www/wgadmin/wgadmin_project/scripts
 sudo chmod -R 710 /var/www/wgadmin/wgadmin_project/scripts
 ```
 
-### Step-by-Step Manual Installation
-
-#### Step 1: System Preparation
-
-```bash
-# Update system
-sudo apt update && sudo apt upgrade -y
-
-# Install required packages
-sudo apt install -y \
-    wireguard wireguard-tools \
-    python3 python3-pip python3-venv \
-    nginx git curl qrencode
-
-# Enable IP forwarding
-echo "net.ipv4.ip_forward=1" | sudo tee -a /etc/sysctl.conf
-sudo sysctl -p
-```
-
-#### Step 2: Create System User/Group
-
-```bash
-# Create wgadmin group
-sudo groupadd -r wgadmin
-
-# Add www-admin to the group (or your application user)
-sudo usermod -aG wgadmin www-admin
-```
-
-#### Step 3: Clone Repository
-
-```bash
-sudo mkdir -p /var/www/wgadmin
-sudo git clone https://github.com/your-username/wireguard_server_admin.git /var/www/wgadmin
-sudo chown -R www-admin:wgadmin /var/www/wgadmin
-```
-
-#### Step 4: WireGuard Setup
-
-```bash
-# Create directories
-sudo mkdir -p /etc/wireguard/client /var/www/wireguard/{conf,qr}
-
-# Generate server keys
-wg genkey | sudo tee /etc/wireguard/server_private.key | wg pubkey | sudo tee /etc/wireguard/server_public.key
-
-# Create WireGuard config
-sudo nano /etc/wireguard/wg0.conf
-```
-
-Example `wg0.conf`:
-
-```ini
-[Interface]
-PrivateKey = <your-server-private-key>
-Address = 10.0.0.1/24
-ListenPort = 51830
-PostUp = iptables -A FORWARD -i %i -j ACCEPT; iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE
-PostDown = iptables -D FORWARD -i %i -j ACCEPT; iptables -t nat -D POSTROUTING -o eth0 -j MASQUERADE
-```
-
-#### Step 5: Set Permissions
-
-```bash
-# WireGuard directories
-sudo chown root:wgadmin /etc/wireguard /etc/wireguard/wg0.conf
-sudo chmod 750 /etc/wireguard
-sudo chmod 640 /etc/wireguard/wg0.conf
-
-# Client directories
-sudo chown -R root:wgadmin /etc/wireguard/client /var/www/wireguard
-sudo chmod 770 /etc/wireguard/client /var/www/wireguard/conf /var/www/wireguard/qr
-
-# Scripts
-sudo chown root:wgadmin /var/www/wgadmin/wgadmin_project/scripts/*.sh
-sudo chmod 750 /var/www/wgadmin/wgadmin_project/scripts/*.sh
-```
-
-#### Step 6: Configure Sudoers
-
-Create `/etc/sudoers.d/wgadmin`:
-
-```bash
-sudo visudo -f /etc/sudoers.d/wgadmin
-```
-
-Add these lines:
-
-```
-%wgadmin ALL=(root) NOPASSWD: /bin/systemctl restart wg-quick@wg0.service
-%wgadmin ALL=(root) NOPASSWD: /usr/bin/wg show wg0 *
-%wgadmin ALL=(root) NOPASSWD: /var/www/wgadmin/wgadmin_project/scripts/wg_*.sh *
-```
-
-#### Step 7: Python Environment
-
-```bash
-cd /var/www/wgadmin
-python3 -m venv .venv
-source .venv/bin/activate
-pip install --upgrade pip
-pip install -r requirements.txt
-```
-
-#### Step 8: Django Configuration
-
-```bash
-# Create .env file
-cp wgadmin_project/deploy/.env.example .env
-nano .env  # Configure all settings
-
-# Run migrations and create admin user
-cd wgadmin_project
-python manage.py migrate
-python manage.py createsuperuser
-python manage.py collectstatic --noinput
-```
-
-#### Step 9: Systemd Service
-
-```bash
-# Copy service file
-sudo cp deploy/gunicorn.service /etc/systemd/system/wgadmin.service
-
-# Create log directory
-sudo mkdir -p /var/log/wgadmin
-sudo chown www-admin:wgadmin /var/log/wgadmin
-
-# Enable and start service
-sudo systemctl daemon-reload
-sudo systemctl enable wgadmin
-sudo systemctl start wgadmin
-
-# Check status
-sudo systemctl status wgadmin
-```
-
-#### Step 10: Nginx Configuration
-
-```bash
-# Copy config
-sudo cp deploy/nginx.conf /etc/nginx/sites-available/wgadmin
-
-# Edit for your domain
-sudo nano /etc/nginx/sites-available/wgadmin
-
-# Enable site
-sudo ln -sf /etc/nginx/sites-available/wgadmin /etc/nginx/sites-enabled/
-sudo rm -f /etc/nginx/sites-enabled/default
-
-# Test and reload
-sudo nginx -t
-sudo systemctl reload nginx
-```
-
-#### Step 11: SSL Certificate (Let's Encrypt)
-
-```bash
-# Install certbot
-sudo apt install -y certbot python3-certbot-nginx
-
-# Get certificate
-sudo certbot --nginx -d your-domain.com
-
-# Auto-renewal is configured automatically
-```
-
-#### Step 12: Start WireGuard
-
-```bash
-sudo systemctl enable wg-quick@wg0
-sudo systemctl start wg-quick@wg0
-sudo wg show wg0
-```
-
-#### Step 13: Firewall Configuration
-
-```bash
-# If using UFW
-sudo ufw allow 51830/udp   # WireGuard
-sudo ufw allow 22/tcp      # SSH
-sudo ufw allow 80/tcp      # HTTP
-sudo ufw allow 443/tcp     # HTTPS
-sudo ufw enable
-```
-
----
-
-## Production Deployment
-
-### Updating the Application
-
-Use the deploy script:
-
-```bash
-cd /var/www/wgadmin
-git pull
-source .venv/bin/activate
-./wgadmin_project/scripts/deploy.sh --update-deps --restart
-```
-
-Or manually:
-
-```bash
-cd /var/www/wgadmin
-git pull
-source .venv/bin/activate
-pip install -r requirements.txt
-cd wgadmin_project
-python manage.py migrate
-python manage.py collectstatic --noinput
-sudo systemctl restart wgadmin
-```
 
 ### Service Management
 
@@ -432,229 +230,3 @@ Add:
 ```
 
 ---
-
-## Development Setup
-
-### Local Development
-
-```bash
-# Clone repository
-git clone https://github.com/your-username/wireguard_server_admin.git
-cd wireguard_server_admin
-
-# Create virtual environment
-python3 -m venv .venv
-source .venv/bin/activate  # Linux/macOS
-# Or: .venv\Scripts\activate  # Windows
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Set environment variables
-export DJANGO_DEBUG=true
-export DJANGO_SECRET_KEY=dev-secret-key
-export WG_USE_SUDO=false  # Disable sudo for local development
-
-# Run migrations
-cd wgadmin_project
-python manage.py migrate
-python manage.py createsuperuser
-
-# Start development server
-python manage.py runserver 0.0.0.0:8000
-```
-
-### Tailwind CSS (CDN Mode)
-
-This project uses Tailwind CSS via CDN. No build step required. For custom builds:
-
-```bash
-npm install -D tailwindcss
-npx tailwindcss -i wgadmin/static/wgadmin/css/input.css \
-                -o wgadmin/static/wgadmin/css/tailwind.css --watch
-```
-
-### Running Tests
-
-```bash
-cd wgadmin_project
-python manage.py test
-```
-
----
-
-## Scripts Reference
-
-All scripts are in [`wgadmin_project/scripts/`](wgadmin_project/scripts/) and output JSON:
-
-### wg_first_start.sh
-
-Initial server provisioning (run once as root):
-
-```bash
-sudo ./wg_first_start.sh --user www-admin --interface wg0
-```
-
-### wg_create_peer.sh
-
-Create a new WireGuard peer:
-
-```bash
-sudo ./wg_create_peer.sh --name client1 --allowed-ips 0.0.0.0/0
-```
-
-### wg_delete_peer.sh
-
-Delete a peer by name or public key:
-
-```bash
-sudo ./wg_delete_peer.sh --id client1
-```
-
-### wg_toggle_peer.sh
-
-Enable or disable a peer:
-
-```bash
-sudo ./wg_toggle_peer.sh --enable --id client1
-sudo ./wg_toggle_peer.sh --disable --id client1
-```
-
-### wg_generate_qr.sh
-
-Generate QR code for a client config:
-
-```bash
-sudo ./wg_generate_qr.sh --id client1
-```
-
-### wg_read_config.sh
-
-Read WireGuard configuration:
-
-```bash
-sudo ./wg_read_config.sh
-```
-
-### deploy.sh
-
-Deploy or update the application:
-
-```bash
-./deploy.sh --update-deps --restart
-```
-
----
-
-## Security Considerations
-
-### Important Security Settings
-
-Ensure these are set correctly in production (`.env`):
-
-```ini
-DJANGO_DEBUG=false
-DJANGO_SECRET_KEY=<strong-random-key>
-DJANGO_ALLOWED_HOSTS=your-domain.com
-```
-
-### Checklist
-
-- [ ] `DEBUG=false` in production
-- [ ] Strong, unique `SECRET_KEY`
-- [ ] HTTPS enabled (Let's Encrypt)
-- [ ] Firewall configured (only 22, 80, 443, WireGuard port)
-- [ ] Regular system updates
-- [ ] Log monitoring
-- [ ] Backup strategy for `/etc/wireguard/` and database
-
-### Nginx Security Headers
-
-The provided nginx config includes:
-
-- `X-Frame-Options: SAMEORIGIN`
-- `X-Content-Type-Options: nosniff`
-- `X-XSS-Protection: 1; mode=block`
-- HSTS (uncomment after confirming HTTPS)
-
----
-
-## Troubleshooting
-
-### Common Issues
-
-#### "Permission denied" when running scripts
-
-```bash
-# Verify user is in wgadmin group
-groups www-admin
-
-# Re-login or use newgrp
-newgrp wgadmin
-
-# Check sudoers
-sudo visudo -cf /etc/sudoers.d/wgadmin
-```
-
-#### WireGuard interface not starting
-
-```bash
-# Check config syntax
-sudo wg-quick strip wg0
-
-# View service logs
-sudo journalctl -u wg-quick@wg0 -e
-
-# Check interface exists
-ip link show wg0
-```
-
-#### Gunicorn socket not found
-
-```bash
-# Check service status
-sudo systemctl status wgadmin
-
-# Verify socket exists
-ls -la /run/gunicorn/
-
-# Check RuntimeDirectory in service file
-```
-
-#### 502 Bad Gateway
-
-```bash
-# Check if gunicorn is running
-sudo systemctl status wgadmin
-
-# Check socket permissions
-ls -la /run/gunicorn/wgadmin.sock
-
-# Test gunicorn directly
-cd /var/www/wgadmin/wgadmin_project
-/var/www/wgadmin/.venv/bin/gunicorn wgadmin_project.wsgi:application --bind 127.0.0.1:8000
-```
-
-### Getting Help
-
-1. Check logs (see [Log Locations](#log-locations))
-2. Run Django check: `python manage.py check --deploy`
-3. Test WireGuard: `sudo wg show`
-4. Verify permissions: `ls -la /etc/wireguard/`
-
----
-
-## License
-
-MIT License - see LICENSE file for details.
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make changes with tests
-4. Submit a pull request
-
----
-
-*Last updated: December 2024*

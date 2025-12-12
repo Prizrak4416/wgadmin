@@ -2,9 +2,9 @@ from django.urls import path, re_path
 
 from . import views
 
-# Security: Restrict identifiers to safe characters only (alphanumeric, dot, dash, underscore)
-# This prevents path traversal and shell injection attempts
-IDENTIFIER_PATTERN = r"[A-Za-z0-9._-]+"
+# Security: Restrict identifiers to safe characters only (alphanumeric, dot, dash, underscore, plus, equals)
+# This prevents path traversal and shell injection attempts while still allowing WireGuard public keys
+IDENTIFIER_PATTERN = r"[A-Za-z0-9._+=-]+"
 
 urlpatterns = [
     path("", views.client_list, name="clients"),
