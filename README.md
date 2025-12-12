@@ -137,7 +137,7 @@ sudo apt update && sudo apt upgrade -y
 
 # 1. Clone the repository and set ownership
 sudo mkdir -p /var/www
-sudo git clone https://github.com/your-username/wireguard_server_admin.git /var/www/wgadmin
+sudo git clone https://github.com/Prizrak4416/wgadmin.git /var/www/wgadmin
 cd /var/www/wgadmin
 
 # 2. Run the initial setup script (as root)
