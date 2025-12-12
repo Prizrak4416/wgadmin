@@ -17,7 +17,6 @@ ENDPOINT_PORT="${WG_ENDPOINT_PORT:-51830}"
 DNS="${WG_DNS:-1.1.1.1}"
 
 NAME=""
-ALLOWED_IPS="0.0.0.0/0"
 
 usage() {
   cat <<EOF
@@ -45,6 +44,7 @@ while [[ $# -gt 0 ]]; do
       echo "Unknown argument: $1" >&2; usage; exit 1;;
   esac
 done
+ALLOWED_IPS="0.0.0.0/0"
 
 if [[ -z "$NAME" ]]; then
   echo '{"status":"error","message":"--name is required"}'

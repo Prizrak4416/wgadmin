@@ -24,7 +24,6 @@ logger = logging.getLogger(__name__)
 
 # Security: Pattern for valid identifiers (alphanumeric, dot, dash, underscore, plus, equals)
 IDENTIFIER_PATTERN = re.compile(r"^[A-Za-z0-9._+=-]+$")
-ALLOWED_IPS_DEFAULT = "0.0.0.0/0"
 
 
 def _validate_identifier(identifier: str) -> bool:
@@ -94,7 +93,7 @@ def _build_client_context(
 ) -> Dict[str, Any]:
     used_ips = sorted({ip for peer in peers for ip in peer.allowed_ips})
     used_names = sorted({peer.identifier for peer in peers})
-    suggested_allowed_ips = ALLOWED_IPS_DEFAULT
+    suggested_allowed_ips = get_suggested_allowed_ips(set(used_ips))
     if create_form is None:
         create_form = ClientCreateForm(
             initial={"allowed_ips": suggested_allowed_ips},
@@ -139,7 +138,7 @@ def create_client(request: HttpRequest) -> HttpResponse:
     form = ClientCreateForm(request.POST, used_ips=used_ips, used_names=used_names)
     if form.is_valid():
         try:
-            service.create_peer(form.cleaned_data["name"], ALLOWED_IPS_DEFAULT)
+            service.create_peer(form.cleaned_data["name"], form.cleaned_data["allowed_ips"])
         except WireGuardError as exc:
             logger.error("Failed to create client %s: %s", form.cleaned_data["name"], exc)
             message = str(exc)
@@ -155,7 +154,7 @@ def create_client(request: HttpRequest) -> HttpResponse:
                 action="create",
                 client_identifier=form.cleaned_data["name"],
                 performed_by=request.user,
-                details={"allowed_ips": ALLOWED_IPS_DEFAULT},
+                details={"allowed_ips": form.cleaned_data["allowed_ips"]},
             )
             messages.success(request, f"Client {form.cleaned_data['name']} created.")
             return redirect("clients")
