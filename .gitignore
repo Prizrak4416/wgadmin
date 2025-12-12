@@ -13,5 +13,7 @@ node_modules/
 # VSCode / editor
 .vscode/
 .idea/
+.env
 /wgadmin_project/scripts/log.txt
 /wgadmin_project/scripts/temp
+wgadmin_project/=0.11.2

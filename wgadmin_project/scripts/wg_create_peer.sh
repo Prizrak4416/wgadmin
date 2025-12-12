@@ -6,8 +6,9 @@ LOG_FILE="${LOG_FILE:-${SCRIPT_DIR}/log.txt}"
 log() { echo "$(date +'%Y-%m-%d %H:%M:%S%z') [wg_create_peer] $*" >> "$LOG_FILE"; }
 
 WG_CONFIG_PATH="${WG_CONFIG_PATH:-/etc/wireguard/wg1.conf}"
-WG_INTERFACE="${WG_INTERFACE:-wg0}"
+WG_INTERFACE="${WG_INTERFACE:-wg1}"
 WG_DIR="${WG_DIR:-/etc/wireguard}"
+WG_GROUP="${WG_GROUP:-wgadmin}"
 CLIENT_DIR="${WG_CLIENT_CONFIG_DIR:-/etc/wireguard/client}"
 PUBLIC_CONF_DIR="${WG_PUBLIC_CONF_DIR:-/var/www/wireguard/conf}"
 QR_DIR="${WG_QR_DIR:-/var/www/wireguard/qr}"
@@ -23,6 +24,7 @@ usage() {
 Usage: $0 --name <client-name> [--allowed-ips <ips>]
 Environment:
   WG_CONFIG_PATH      Path to wg1.conf (default /etc/wireguard/wg1.conf)
+  WG_GROUP            Group owning WireGuard files (default wgadmin)
   WG_CLIENT_CONFIG_DIR  Path to store client configs (default /etc/wireguard/client)
   WG_PUBLIC_CONF_DIR    Public conf export dir (default /var/www/wireguard/conf)
   WG_QR_DIR             QR output dir (default /var/www/wireguard/qr)
@@ -53,6 +55,9 @@ log "start name=${NAME} allowed_ips=${ALLOWED_IPS} config=${WG_CONFIG_PATH}"
 
 mkdir -p "$CLIENT_DIR" "$PUBLIC_CONF_DIR" "$QR_DIR"
 [ -f "$WG_CONFIG_PATH" ] || touch "$WG_CONFIG_PATH"
+chown root:"${WG_GROUP}" "$CLIENT_DIR" "$PUBLIC_CONF_DIR" "$QR_DIR" "$WG_CONFIG_PATH" "$WG_DIR" 2>/dev/null || true
+chmod 770 "$CLIENT_DIR" "$PUBLIC_CONF_DIR" "$QR_DIR" 2>/dev/null || true
+chmod 640 "$WG_CONFIG_PATH" 2>/dev/null || true
 
 if [[ -f "${WG_DIR}/${NAME}_privatekey" ]]; then
   echo "{\"status\":\"error\",\"message\":\"name already exists\"}"
@@ -154,6 +159,15 @@ generate_client_config > "$PUBLIC_CONF_PATH"
 
 if command -v qrencode >/dev/null 2>&1; then
   qrencode -t PNG -o "${QR_DIR}/${NAME}.png" < "$PUBLIC_CONF_PATH"
+fi
+
+# Ensure ownership and permissions for Django access via wgadmin group
+chown root:"${WG_GROUP}" "$WG_CONFIG_PATH" "${WG_DIR}/${NAME}_privatekey" "${WG_DIR}/${NAME}_publickey" "$CLIENT_CONF_PATH" "$PUBLIC_CONF_PATH" 2>/dev/null || true
+chmod 640 "$WG_CONFIG_PATH" "${WG_DIR}/${NAME}_privatekey" "${WG_DIR}/${NAME}_publickey" 2>/dev/null || true
+chmod 660 "$CLIENT_CONF_PATH" "$PUBLIC_CONF_PATH" 2>/dev/null || true
+if [[ -f "${QR_DIR}/${NAME}.png" ]]; then
+  chown root:"${WG_GROUP}" "${QR_DIR}/${NAME}.png" 2>/dev/null || true
+  chmod 660 "${QR_DIR}/${NAME}.png" 2>/dev/null || true
 fi
 
 systemctl restart "wg-quick@${WG_INTERFACE}.service" >/dev/null 2>&1 || true

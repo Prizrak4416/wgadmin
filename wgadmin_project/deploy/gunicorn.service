@@ -1,0 +1,41 @@
+# /etc/systemd/system/wgadmin.service
+# WireGuard Admin Django Application - Gunicorn Service
+#
+# Copy this file to /etc/systemd/system/wgadmin.service
+# Then: sudo systemctl daemon-reload && sudo systemctl enable --now wgadmin
+
+[Unit]
+Description=WireGuard Admin Django Application (Gunicorn)
+After=network.target
+
+[Service]
+Type=notify
+User=www-data
+Group=wgadmin
+RuntimeDirectory=gunicorn
+WorkingDirectory=/var/www/wgadmin/wgadmin_project
+
+# Environment file for secrets (create this file manually)
+EnvironmentFile=/var/www/wgadmin/.env
+
+# Gunicorn command
+ExecStart=/var/www/wgadmin/.venv/bin/gunicorn \
+    --workers 3 \
+    --bind unix:/run/gunicorn/wgadmin.sock \
+    --access-logfile /var/log/wgadmin/access.log \
+    --error-logfile /var/log/wgadmin/error.log \
+    --capture-output \
+    --timeout 30 \
+    wgadmin_project.wsgi:application
+
+ExecReload=/bin/kill -s HUP $MAINPID
+KillMode=mixed
+TimeoutStopSec=5
+PrivateTmp=true
+
+# Restart policy
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

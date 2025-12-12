@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 import subprocess
 from dataclasses import dataclass
@@ -10,6 +11,8 @@ from typing import Dict, Iterable, List, Optional
 
 from django.conf import settings
 from django.utils import timezone
+
+logger = logging.getLogger(__name__)
 
 
 class WireGuardError(Exception):
@@ -227,8 +230,8 @@ class WireGuardService:
         cmd = [str(script_path), *args]
         if self.use_sudo:
             cmd = [self.sudo_bin, *cmd]
+        logger.debug("Executing script: %s", script_name)
         try:
-            print(cmd)
             proc = subprocess.run(cmd, capture_output=True, text=True, check=True, timeout=self.script_timeout)
         except subprocess.TimeoutExpired as exc:
             raise WireGuardScriptError(f"{script_name} timed out after {self.script_timeout}s") from exc

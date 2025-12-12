@@ -1,4 +1,7 @@
 import base64
+import logging
+import re
+from datetime import timedelta
 from io import BytesIO
 from typing import Any, Dict
 
@@ -15,6 +18,16 @@ from .forms import ActivateClientForm, ClientCreateForm, DeleteClientForm, Toggl
 from .models import AuditLog, ConfigDownloadToken
 from .services.wireguard import WireGuardError, WireGuardService
 
+logger = logging.getLogger(__name__)
+
+# Security: Pattern for valid identifiers (alphanumeric, dot, dash, underscore)
+IDENTIFIER_PATTERN = re.compile(r"^[A-Za-z0-9._-]+$")
+
+
+def _validate_identifier(identifier: str) -> bool:
+    """Validate that identifier contains only safe characters."""
+    return bool(IDENTIFIER_PATTERN.match(identifier))
+
 
 def staff_required(view_func):
     decorated = login_required(user_passes_test(lambda u: u.is_staff)(view_func))
@@ -27,7 +40,8 @@ def client_list(request: HttpRequest) -> HttpResponse:
     try:
         peers = service.list_peers(include_runtime=True)
     except WireGuardError as exc:
-        messages.error(request, f"Unable to read WireGuard config: {exc}")
+        logger.error("Failed to read WireGuard config: %s", exc)
+        messages.error(request, "Unable to read WireGuard configuration. Please check server logs.")
         peers = []
     _cleanup_tokens()
     active_tokens = ConfigDownloadToken.objects.filter(is_active=True, expires_at__gt=timezone.now())
@@ -58,7 +72,8 @@ def create_client(request: HttpRequest) -> HttpResponse:
         try:
             existing_peers = service.list_peers(include_runtime=False)
         except WireGuardError as exc:
-            messages.error(request, f"Unable to read existing clients: {exc}")
+            logger.error("Failed to read existing clients: %s", exc)
+            messages.error(request, "Unable to read existing clients. Please check server logs.")
             return redirect("clients")
         requested_name = form.cleaned_data["name"]
         used_names = {peer.identifier for peer in existing_peers}
@@ -74,7 +89,8 @@ def create_client(request: HttpRequest) -> HttpResponse:
             try:
                 service.create_peer(form.cleaned_data["name"], form.cleaned_data["allowed_ips"])
             except WireGuardError as exc:
-                messages.error(request, f"Could not create client: {exc}")
+                logger.error("Failed to create client %s: %s", form.cleaned_data["name"], exc)
+                messages.error(request, "Could not create client. Please check server logs.")
             else:
                 AuditLog.objects.create(
                     action="create",
@@ -92,11 +108,17 @@ def create_client(request: HttpRequest) -> HttpResponse:
 def toggle_client(request: HttpRequest, identifier: str, enable: bool) -> HttpResponse:
     if request.method != "POST":
         raise Http404()
+    # Security: Validate identifier format
+    if not _validate_identifier(identifier):
+        logger.warning("Invalid identifier attempted: %s", identifier[:50])
+        messages.error(request, "Invalid client identifier.")
+        return redirect("clients")
     service = WireGuardService()
     try:
         service.set_peer_enabled(identifier, enable)
     except WireGuardError as exc:
-        messages.error(request, f"Unable to update client: {exc}")
+        logger.error("Failed to toggle client %s: %s", identifier, exc)
+        messages.error(request, "Unable to update client. Please check server logs.")
     else:
         AuditLog.objects.create(
             action="enable" if enable else "disable",
@@ -121,11 +143,17 @@ def disable_client(request: HttpRequest, identifier: str) -> HttpResponse:
 def delete_client(request: HttpRequest, identifier: str) -> HttpResponse:
     if request.method != "POST":
         raise Http404()
+    # Security: Validate identifier format
+    if not _validate_identifier(identifier):
+        logger.warning("Invalid identifier attempted for deletion: %s", identifier[:50])
+        messages.error(request, "Invalid client identifier.")
+        return redirect("clients")
     service = WireGuardService()
     try:
         service.delete_peer(identifier)
     except WireGuardError as exc:
-        messages.error(request, f"Unable to delete client: {exc}")
+        logger.error("Failed to delete client %s: %s", identifier, exc)
+        messages.error(request, "Unable to delete client. Please check server logs.")
     else:
         AuditLog.objects.create(action="delete", client_identifier=identifier, performed_by=request.user)
         messages.success(request, f"{identifier} deleted.")
@@ -136,6 +164,11 @@ def delete_client(request: HttpRequest, identifier: str) -> HttpResponse:
 def activate_client(request: HttpRequest, identifier: str) -> HttpResponse:
     if request.method != "POST":
         raise Http404()
+    # Security: Validate identifier format
+    if not _validate_identifier(identifier):
+        logger.warning("Invalid identifier attempted for activation: %s", identifier[:50])
+        messages.error(request, "Invalid client identifier.")
+        return redirect("clients")
     service = WireGuardService()
     peer = service.get_peer(identifier)
     if not peer:
@@ -204,7 +237,14 @@ def _qr_data_url(text: str) -> str:
 
 
 def _cleanup_tokens() -> None:
+    """Deactivate expired tokens and delete old ones."""
     now = timezone.now()
-    expired = ConfigDownloadToken.objects.filter(is_active=True, expires_at__lte=now)
-    if expired.exists():
-        expired.update(is_active=False)
+    # Deactivate expired tokens
+    expired_count = ConfigDownloadToken.objects.filter(is_active=True, expires_at__lte=now).update(is_active=False)
+    if expired_count:
+        logger.info("Deactivated %d expired tokens", expired_count)
+    # Delete tokens older than 30 days to prevent database bloat
+    cutoff = now - timedelta(days=30)
+    deleted_count, _ = ConfigDownloadToken.objects.filter(created_at__lt=cutoff).delete()
+    if deleted_count:
+        logger.info("Deleted %d old tokens", deleted_count)
