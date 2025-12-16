@@ -1,58 +1,46 @@
+{% load static %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Login - WireGuard Admin</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-      tailwind.config = {
-        theme: {
-          extend: {
-            fontFamily: {
-              sans: ['"Inter"', "ui-sans-serif", "system-ui", "sans-serif"],
-            },
-            colors: {
-              ink: "#0b1221",
-              accent: "#22d3ee"
-            }
-          }
-        }
-      }
-    </script>
+    <link rel="stylesheet" href="{% static 'wgadmin/css/tailwind.css' %}">
 </head>
-<body class="min-h-screen bg-ink text-slate-50 flex items-center justify-center px-4">
-    <div class="absolute inset-0 pointer-events-none" aria-hidden="true">
+<body class="min-h-screen bg-ink text-slate-50 flex items-center justify-center px-4 py-8">
+    <div class="absolute inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
         <div class="absolute -left-32 -top-32 h-64 w-64 rounded-full bg-cyan-500/20 blur-3xl"></div>
         <div class="absolute right-0 bottom-0 h-72 w-72 rounded-full bg-emerald-500/20 blur-3xl"></div>
     </div>
-    <div class="w-full max-w-md bg-slate-900/80 border border-slate-800 rounded-2xl shadow-2xl p-10 relative">
+    <div class="w-full max-w-md bg-slate-900/80 border border-slate-800 rounded-2xl shadow-2xl p-6 sm:p-10 relative">
         <div class="flex items-center gap-3 mb-6">
-            <div class="h-10 w-10 rounded-xl bg-cyan-500/20 border border-cyan-400/40 flex items-center justify-center text-cyan-200 font-bold">
+            <div class="h-10 w-10 shrink-0 rounded-xl bg-cyan-500/20 border border-cyan-400/40 flex items-center justify-center text-cyan-200 font-bold">
                 WG
             </div>
-            <div>
+            <div class="min-w-0">
                 <p class="text-xs uppercase tracking-wide text-slate-400">Secure access</p>
-                <h1 class="text-xl font-semibold">WireGuard Admin</h1>
+                <h1 class="text-lg sm:text-xl font-semibold truncate">WireGuard Admin</h1>
             </div>
         </div>
         <form method="post" class="space-y-4">
             {% csrf_token %}
             {% if form.errors %}
-                <div class="text-red-200 text-sm bg-red-900/40 border border-red-800 rounded-lg p-3">Invalid username or password.</div>
+                <div class="text-red-200 text-sm bg-red-900/40 border border-red-800 rounded-lg p-3 break-words">Invalid username or password.</div>
             {% endif %}
             <div class="space-y-2">
-                <label class="text-sm text-slate-300">Username</label>
+                <label for="id_username" class="text-sm text-slate-300">Username</label>
                 <input type="text" name="username" autofocus required id="id_username"
-                       class="w-full rounded-lg bg-slate-900 border border-slate-800 px-3 py-2 text-sm text-slate-100 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/40"
-                       value="{{ form.username.value|default_if_none:'' }}">
+                       class="w-full rounded-lg bg-slate-900 border border-slate-800 px-3 py-3 sm:py-2 text-base sm:text-sm text-slate-100 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/40 focus:outline-none"
+                       value="{{ form.username.value|default_if_none:'' }}"
+                       autocomplete="username">
             </div>
             <div class="space-y-2">
-                <label class="text-sm text-slate-300">Password</label>
+                <label for="id_password" class="text-sm text-slate-300">Password</label>
                 <input type="password" name="password" required id="id_password"
-                       class="w-full rounded-lg bg-slate-900 border border-slate-800 px-3 py-2 text-sm text-slate-100 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/40">
+                       class="w-full rounded-lg bg-slate-900 border border-slate-800 px-3 py-3 sm:py-2 text-base sm:text-sm text-slate-100 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/40 focus:outline-none"
+                       autocomplete="current-password">
             </div>
-            <button class="w-full bg-cyan-400 hover:bg-cyan-300 text-slate-950 rounded-lg py-2 font-semibold shadow-md shadow-cyan-500/30 transition" type="submit">
+            <button class="w-full bg-cyan-400 hover:bg-cyan-300 active:bg-cyan-500 text-slate-950 rounded-lg py-3 sm:py-2 text-base sm:text-sm font-semibold shadow-md shadow-cyan-500/30 transition min-h-[44px]" type="submit">
                 Sign in
             </button>
         </form>

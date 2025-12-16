@@ -1,11 +1,13 @@
 {% extends "wgadmin/base.html" %}
 {% block content %}
-<div class="bg-slate-950/70 border border-slate-800 rounded-2xl p-6 max-w-3xl mx-auto text-center">
-    <h1 class="text-2xl font-semibold mb-4">{{ peer.name }}</h1>
-    <p class="text-slate-400 text-sm mb-6">Configuration link expires at {{ token.expires_at }}</p>
+<div class="card p-4 sm:p-6 max-w-3xl mx-auto text-center">
+    <h1 class="text-xl sm:text-2xl font-semibold mb-3 sm:mb-4 break-words">{{ peer.name }}</h1>
+    <p class="text-slate-400 text-xs sm:text-sm mb-4 sm:mb-6">Configuration link expires at {{ token.expires_at }}</p>
     <div class="flex flex-col items-center gap-4">
-        <img src="{{ qr_data_url }}" alt="QR Code" class="w-64 h-64 bg-white rounded-lg shadow-lg">
-        <a href="{{ download_url }}" class="px-4 py-2 rounded-lg bg-emerald-500 text-slate-950 font-semibold hover:bg-emerald-400">Download .conf</a>
+        <img src="{{ qr_data_url }}" alt="QR Code" class="w-48 h-48 sm:w-64 sm:h-64 bg-white rounded-lg shadow-lg">
+        <a href="{{ download_url }}" class="inline-flex items-center justify-center px-6 py-3 rounded-lg bg-emerald-500 text-slate-950 font-semibold hover:bg-emerald-400 active:bg-emerald-600 transition min-h-[44px] w-full sm:w-auto">
+            Download .conf
+        </a>
     </div>
 </div>
 {% endblock %}

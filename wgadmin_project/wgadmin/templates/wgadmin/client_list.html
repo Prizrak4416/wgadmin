@@ -1,59 +1,67 @@
 {% extends "wgadmin/base.html" %}
 {% load wg_tags %}
 {% block content %}
-<div class="flex items-center justify-between">
-    <div>
-        <div class="text-2xl font-semibold">Clients</div>
-        <p class="text-slate-400 text-sm">Source: {{ wg_config_path }}</p>
+<!-- Header section with title and create form -->
+<div class="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
+    <div class="min-w-0 shrink-0">
+        <div class="text-xl sm:text-2xl font-semibold">Clients</div>
+        <p class="text-slate-400 text-xs sm:text-sm truncate max-w-[250px] sm:max-w-none" title="{{ wg_config_path }}">Source: {{ wg_config_path }}</p>
     </div>
-    <button hx-target="#create-form" class="hidden"></button>
-    {% with name_base_class="bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm transition-colors" ip_base_class="bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm w-48 transition-colors" %}
-        <form method="post" action="{% url 'client-create' %}" class="flex items-end gap-3">
+    
+    <!-- Create form - stacks vertically on mobile -->
+    {% with name_base_class="input-base w-full" ip_base_class="input-base w-full" %}
+        <form method="post" action="{% url 'client-create' %}" class="w-full lg:w-auto">
             {% csrf_token %}
-            <div>
-                <label class="block text-sm text-slate-300 mb-1">Name</label>
-                {% with name_error=create_form.errors.name %}
-                    <input
-                        id="name-input"
-                        name="name"
-                        required
-                        minlength="3"
-                        value="{{ create_form.name.value|default_if_none:'' }}"
-                        class="{{ name_base_class }} {% if name_error %}border-red-500{% endif %}"
-                        placeholder="client01"
-                        data-base-class="{{ name_base_class }}"
-                        data-server-invalid="{% if name_error %}true{% else %}false{% endif %}"
-                        data-server-value="{{ create_form.name.value|default_if_none:'' }}">
-                    <p
-                        id="name-error"
-                        class="text-xs text-red-400 mt-1 {% if name_error %}{% else %}invisible{% endif %} min-h-[1rem]"
-                        data-default-message="Введите уникальное имя."
-                        data-server-message="{% if name_error %}{{ name_error.0 }}{% endif %}">
-                        {% if name_error %}{{ name_error.0 }}{% else %}Введите уникальное имя.{% endif %}
-                    </p>
-                {% endwith %}
+            <div class="flex flex-col sm:flex-row gap-3 sm:items-end">
+                <div class="flex-1 sm:flex-initial">
+                    <label class="block text-sm text-slate-300 mb-1">Name</label>
+                    {% with name_error=create_form.errors.name %}
+                        <input
+                            id="name-input"
+                            name="name"
+                            required
+                            minlength="3"
+                            value="{{ create_form.name.value|default_if_none:'' }}"
+                            class="{{ name_base_class }} {% if name_error %}border-red-500{% endif %}"
+                            placeholder="client01"
+                            data-base-class="{{ name_base_class }}"
+                            data-server-invalid="{% if name_error %}true{% else %}false{% endif %}"
+                            data-server-value="{{ create_form.name.value|default_if_none:'' }}"
+                            autocomplete="off">
+                        <p
+                            id="name-error"
+                            class="text-xs text-red-400 mt-1 {% if name_error %}{% else %}invisible{% endif %} min-h-[1rem]"
+                            data-default-message="Введите уникальное имя."
+                            data-server-message="{% if name_error %}{{ name_error.0 }}{% endif %}">
+                            {% if name_error %}{{ name_error.0 }}{% else %}Введите уникальное имя.{% endif %}
+                        </p>
+                    {% endwith %}
+                </div>
+                <div class="flex-1 sm:flex-initial sm:w-48">
+                    <label class="block text-sm text-slate-300 mb-1">Allowed IPs</label>
+                    {% with ip_error=create_form.errors.allowed_ips %}
+                        <input
+                            id="allowed-ips-input"
+                            name="allowed_ips"
+                            value="{{ create_form.allowed_ips.value|default_if_none:'' }}"
+                            class="{{ ip_base_class }} {% if ip_error %}border-red-500{% endif %}"
+                            data-base-class="{{ ip_base_class }}"
+                            data-server-invalid="{% if ip_error %}true{% else %}false{% endif %}"
+                            data-server-value="{{ create_form.allowed_ips.value|default_if_none:'' }}"
+                            autocomplete="off">
+                        <p
+                            id="allowed-ips-error"
+                            class="text-xs text-red-400 mt-1 {% if ip_error %}{% else %}invisible{% endif %} min-h-[1rem]"
+                            data-default-message="Этот IP уже используется."
+                            data-server-message="{% if ip_error %}{{ ip_error.0 }}{% endif %}">
+                            {% if ip_error %}{{ ip_error.0 }}{% else %}Этот IP уже используется.{% endif %}
+                        </p>
+                    {% endwith %}
+                </div>
+                <button id="create-btn" type="submit" class="bg-emerald-500 hover:bg-emerald-400 active:bg-emerald-600 text-slate-950 font-semibold rounded-lg px-4 py-3 sm:py-2 transition-opacity min-h-[44px] w-full sm:w-auto whitespace-nowrap">
+                    Create
+                </button>
             </div>
-            <div>
-                <label class="block text-sm text-slate-300 mb-1">Allowed IPs</label>
-                {% with ip_error=create_form.errors.allowed_ips %}
-                    <input
-                        id="allowed-ips-input"
-                        name="allowed_ips"
-                        value="{{ create_form.allowed_ips.value|default_if_none:'' }}"
-                        class="{{ ip_base_class }} {% if ip_error %}border-red-500{% endif %}"
-                        data-base-class="{{ ip_base_class }}"
-                        data-server-invalid="{% if ip_error %}true{% else %}false{% endif %}"
-                        data-server-value="{{ create_form.allowed_ips.value|default_if_none:'' }}">
-                    <p
-                        id="allowed-ips-error"
-                        class="text-xs text-red-400 mt-1 {% if ip_error %}{% else %}invisible{% endif %} min-h-[1rem]"
-                        data-default-message="Этот IP уже используется."
-                        data-server-message="{% if ip_error %}{{ ip_error.0 }}{% endif %}">
-                        {% if ip_error %}{{ ip_error.0 }}{% else %}Этот IP уже используется.{% endif %}
-                    </p>
-                {% endwith %}
-            </div>
-            <button id="create-btn" type="submit" class="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold rounded-lg px-4 py-2 transition-opacity">Create</button>
         </form>
     {% endwith %}
 </div>
@@ -61,103 +69,201 @@
 {{ used_ips|json_script:"used-ips-data" }}
 {{ used_names|json_script:"used-names-data" }}
 
-<div class="mt-6 bg-slate-950/60 border border-slate-800 rounded-2xl overflow-hidden">
-    <table class="min-w-full">
-        <thead class="bg-slate-900/70 text-slate-300 text-sm">
-            <tr>
-                <th class="px-4 py-3 text-left font-semibold">Name</th>
-                <th class="px-4 py-3 text-left font-semibold">Public Key</th>
-                <th class="px-4 py-3 text-left font-semibold">Allowed IPs</th>
-                <th class="px-4 py-3 text-left font-semibold">Status</th>
-                <th class="px-4 py-3 text-left font-semibold">Traffic</th>
-                <th class="px-4 py-3 text-left font-semibold">Actions</th>
-            </tr>
-        </thead>
-        <tbody class="divide-y divide-slate-800 text-sm">
-            {% for peer in peers %}
-                <tr class="hover:bg-slate-900/40">
-                    <td class="px-4 py-3 font-semibold">{{ peer.name }}</td>
-                    <td class="px-4 py-3 text-slate-300">
-                        <div class="font-mono text-xs">{{ peer.public_key|slice:":20" }}...</div>
-                    </td>
-                    <td class="px-4 py-3 text-slate-300">
-                        {{ peer.allowed_ips|join:", " }}
-                    </td>
-                    <td class="px-4 py-3">
+<!-- Peers list -->
+<div class="mt-6 card overflow-hidden">
+    <!-- Desktop table view -->
+    <div class="hidden lg:block overflow-x-auto">
+        <table class="min-w-full">
+            <thead class="bg-slate-900/70 text-slate-300 text-sm">
+                <tr>
+                    <th class="px-4 py-3 text-left font-semibold">Name</th>
+                    <th class="px-4 py-3 text-left font-semibold">Public Key</th>
+                    <th class="px-4 py-3 text-left font-semibold">Allowed IPs</th>
+                    <th class="px-4 py-3 text-left font-semibold">Status</th>
+                    <th class="px-4 py-3 text-left font-semibold">Traffic</th>
+                    <th class="px-4 py-3 text-left font-semibold">Actions</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-800 text-sm">
+                {% for peer in peers %}
+                    <tr class="hover:bg-slate-900/40">
+                        <td class="px-4 py-3 font-semibold">{{ peer.name }}</td>
+                        <td class="px-4 py-3 text-slate-300">
+                            <div class="font-mono text-xs">{{ peer.public_key|slice:":20" }}...</div>
+                        </td>
+                        <td class="px-4 py-3 text-slate-300">
+                            {{ peer.allowed_ips|join:", " }}
+                        </td>
+                        <td class="px-4 py-3">
+                            {% if peer.is_enabled %}
+                                <span class="px-2 py-1 rounded-full bg-emerald-500/20 text-emerald-200 text-xs">Enabled</span>
+                            {% else %}
+                                <span class="px-2 py-1 rounded-full bg-slate-700 text-slate-200 text-xs">Disabled</span>
+                            {% endif %}
+                            {% if peer.latest_handshake %}
+                                <div class="text-xs text-slate-400 mt-1">Last handshake {{ peer.latest_handshake }}</div>
+                            {% endif %}
+                        </td>
+                        <td class="px-4 py-3 text-slate-300">
+                            {% if peer.transfer_rx %}
+                                <div class="text-xs">↓ {{ peer.transfer_rx|filesizeformat }}</div>
+                            {% endif %}
+                            {% if peer.transfer_tx %}
+                                <div class="text-xs">↑ {{ peer.transfer_tx|filesizeformat }}</div>
+                            {% endif %}
+                        </td>
+                        <td class="px-4 py-3">
+                            <div class="flex flex-wrap gap-2">
+                                <form method="post" action="{% url 'client-activate' peer.identifier %}">
+                                    {% csrf_token %}
+                                    <button class="btn-action bg-cyan-500/80 text-slate-950 hover:bg-cyan-400" type="submit">
+                                        Activate
+                                    </button>
+                                </form>
+                                {% if peer.is_enabled %}
+                                    <form method="post" action="{% url 'client-disable' peer.identifier %}">
+                                        {% csrf_token %}
+                                        <button class="btn-action bg-amber-500/80 text-slate-950 hover:bg-amber-400" type="submit">
+                                            Disable
+                                        </button>
+                                    </form>
+                                {% else %}
+                                    <form method="post" action="{% url 'client-enable' peer.identifier %}">
+                                        {% csrf_token %}
+                                        <button class="btn-action bg-emerald-500/80 text-slate-950 hover:bg-emerald-400" type="submit">
+                                            Enable
+                                        </button>
+                                    </form>
+                                {% endif %}
+                                <form method="post" action="{% url 'client-delete' peer.identifier %}" onsubmit="return confirm('Delete {{ peer.name }}?');">
+                                    {% csrf_token %}
+                                    <button class="btn-action bg-red-600/80 text-slate-50 hover:bg-red-500" type="submit">
+                                        Delete
+                                    </button>
+                                </form>
+                            </div>
+                            {% with token=token_map|dict_get:peer.identifier %}
+                                {% if token %}
+                                    {% url 'public-config' token.token as activation_path %}
+                                    {% with full_url=base_url|add:activation_path %}
+                                        <div class="text-xs text-slate-400 mt-2">
+                                            Active link until {{ token.expires_at }}<br>
+                                            <button
+                                                type="button"
+                                                class="copy-link break-all text-left text-slate-200 bg-slate-800/30 hover:bg-slate-800/60 hover:text-emerald-200 cursor-pointer transition-colors font-mono px-2 py-1 rounded mt-1 max-w-[300px]"
+                                                data-url="{{ full_url }}"
+                                                aria-label="Copy link">
+                                                {{ full_url }}
+                                            </button>
+                                        </div>
+                                    {% endwith %}
+                                {% endif %}
+                            {% endwith %}
+                        </td>
+                    </tr>
+                {% empty %}
+                    <tr>
+                        <td colspan="6" class="px-4 py-6 text-center text-slate-400">No peers found in config.</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    
+    <!-- Mobile card view -->
+    <div class="lg:hidden divide-y divide-slate-800">
+        {% for peer in peers %}
+            <div class="p-4 space-y-3">
+                <!-- Header row: name and status -->
+                <div class="flex items-start justify-between gap-2">
+                    <div class="min-w-0 flex-1">
+                        <h3 class="font-semibold text-base truncate">{{ peer.name }}</h3>
+                        <div class="font-mono text-xs text-slate-400 truncate" title="{{ peer.public_key }}">{{ peer.public_key|slice:":24" }}...</div>
+                    </div>
+                    <div class="shrink-0">
                         {% if peer.is_enabled %}
                             <span class="px-2 py-1 rounded-full bg-emerald-500/20 text-emerald-200 text-xs">Enabled</span>
                         {% else %}
                             <span class="px-2 py-1 rounded-full bg-slate-700 text-slate-200 text-xs">Disabled</span>
                         {% endif %}
-                        {% if peer.latest_handshake %}
-                            <div class="text-xs text-slate-400">Last handshake {{ peer.latest_handshake }}</div>
-                        {% endif %}
-                    </td>
-                    <td class="px-4 py-3 text-slate-300">
-                        {% if peer.transfer_rx %}
-                            <div class="text-xs">↓ {{ peer.transfer_rx|filesizeformat }}</div>
-                        {% endif %}
-                        {% if peer.transfer_tx %}
-                            <div class="text-xs">↑ {{ peer.transfer_tx|filesizeformat }}</div>
-                        {% endif %}
-                    </td>
-                    <td class="px-4 py-3">
-                        <div class="flex flex-wrap gap-2">
-                            <form method="post" action="{% url 'client-activate' peer.identifier %}">
-                                {% csrf_token %}
-                                <button class="px-3 py-1 rounded-lg bg-cyan-500/80 text-slate-950 text-xs font-semibold hover:bg-cyan-400" type="submit">
-                                    Activate
-                                </button>
-                            </form>
-                            {% if peer.is_enabled %}
-                                <form method="post" action="{% url 'client-disable' peer.identifier %}">
-                                    {% csrf_token %}
-                                    <button class="px-3 py-1 rounded-lg bg-amber-500/80 text-slate-950 text-xs font-semibold hover:bg-amber-400" type="submit">
-                                        Disable
-                                    </button>
-                                </form>
-                            {% else %}
-                                <form method="post" action="{% url 'client-enable' peer.identifier %}">
-                                    {% csrf_token %}
-                                    <button class="px-3 py-1 rounded-lg bg-emerald-500/80 text-slate-950 text-xs font-semibold hover:bg-emerald-400" type="submit">
-                                        Enable
-                                    </button>
-                                </form>
-                            {% endif %}
-                            <form method="post" action="{% url 'client-delete' peer.identifier %}" onsubmit="return confirm('Delete {{ peer.name }}?');">
-                                {% csrf_token %}
-                                <button class="px-3 py-1 rounded-lg bg-red-600/80 text-slate-50 text-xs font-semibold hover:bg-red-500" type="submit">
-                                    Delete
-                                </button>
-                            </form>
+                    </div>
+                </div>
+                
+                <!-- Info row -->
+                <div class="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-300">
+                    <div>
+                        <span class="text-slate-500">IPs:</span> {{ peer.allowed_ips|join:", " }}
+                    </div>
+                    {% if peer.transfer_rx or peer.transfer_tx %}
+                        <div>
+                            <span class="text-slate-500">Traffic:</span>
+                            {% if peer.transfer_rx %}↓{{ peer.transfer_rx|filesizeformat }}{% endif %}
+                            {% if peer.transfer_tx %}↑{{ peer.transfer_tx|filesizeformat }}{% endif %}
                         </div>
-                        {% with token=token_map|dict_get:peer.identifier %}
-                            {% if token %}
-                                {% url 'public-config' token.token as activation_path %}
-                                {% with full_url=base_url|add:activation_path %}
-                                    <div class="text-xs text-slate-400 mt-2">
-                                        Active link until {{ token.expires_at }}<br>
-                                        <button
-                                            type="button"
-                                            class="copy-link break-all text-left text-slate-200 bg-slate-800/30 hover:bg-slate-800/60 hover:text-emerald-200 cursor-pointer transition-colors font-mono px-2 py-1 rounded"
-                                            data-url="{{ full_url }}"
-                                            aria-label="Copy link">
-                                            {{ full_url }}
-                                        </button>
-                                    </div>
-                                {% endwith %}
-                            {% endif %}
+                    {% endif %}
+                    {% if peer.latest_handshake %}
+                        <div>
+                            <span class="text-slate-500">Handshake:</span> {{ peer.latest_handshake }}
+                        </div>
+                    {% endif %}
+                </div>
+                
+                <!-- Actions row -->
+                <div class="flex flex-wrap gap-2">
+                    <form method="post" action="{% url 'client-activate' peer.identifier %}">
+                        {% csrf_token %}
+                        <button class="btn-action bg-cyan-500/80 text-slate-950 hover:bg-cyan-400 active:bg-cyan-600" type="submit">
+                            Activate
+                        </button>
+                    </form>
+                    {% if peer.is_enabled %}
+                        <form method="post" action="{% url 'client-disable' peer.identifier %}">
+                            {% csrf_token %}
+                            <button class="btn-action bg-amber-500/80 text-slate-950 hover:bg-amber-400 active:bg-amber-600" type="submit">
+                                Disable
+                            </button>
+                        </form>
+                    {% else %}
+                        <form method="post" action="{% url 'client-enable' peer.identifier %}">
+                            {% csrf_token %}
+                            <button class="btn-action bg-emerald-500/80 text-slate-950 hover:bg-emerald-400 active:bg-emerald-600" type="submit">
+                                Enable
+                            </button>
+                        </form>
+                    {% endif %}
+                    <form method="post" action="{% url 'client-delete' peer.identifier %}" onsubmit="return confirm('Delete {{ peer.name }}?');">
+                        {% csrf_token %}
+                        <button class="btn-action bg-red-600/80 text-slate-50 hover:bg-red-500 active:bg-red-700" type="submit">
+                            Delete
+                        </button>
+                    </form>
+                </div>
+                
+                <!-- Active link section -->
+                {% with token=token_map|dict_get:peer.identifier %}
+                    {% if token %}
+                        {% url 'public-config' token.token as activation_path %}
+                        {% with full_url=base_url|add:activation_path %}
+                            <div class="text-xs text-slate-400 pt-2 border-t border-slate-800/50">
+                                <div class="mb-1">Active link until {{ token.expires_at }}</div>
+                                <button
+                                    type="button"
+                                    class="copy-link w-full break-all text-left text-slate-200 bg-slate-800/30 hover:bg-slate-800/60 hover:text-emerald-200 cursor-pointer transition-colors font-mono px-2 py-2 rounded text-xs"
+                                    data-url="{{ full_url }}"
+                                    aria-label="Copy link">
+                                    {{ full_url }}
+                                </button>
+                            </div>
                         {% endwith %}
-                    </td>
-                </tr>
-            {% empty %}
-                <tr>
-                    <td colspan="6" class="px-4 py-6 text-center text-slate-400">No peers found in config.</td>
-                </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+                    {% endif %}
+                {% endwith %}
+            </div>
+        {% empty %}
+            <div class="px-4 py-8 text-center text-slate-400">No peers found in config.</div>
+        {% endfor %}
+    </div>
 </div>
+
 <script>
 (() => {
     const usedIpsEl = document.getElementById("used-ips-data");

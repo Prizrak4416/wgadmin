@@ -31,6 +31,7 @@ A web-based admin interface for managing WireGuard VPN peers. This application p
 
 - **Operating System**: Debian 12 (Bookworm) or Ubuntu 22.04+
 - **Python**: 3.11+
+- **Node.js**: 18+ (LTS) — required for building Tailwind CSS
 - **Privileges**: Root access or sudo privileges
 - **Network**: Static IP or DNS name for WireGuard endpoint
 
@@ -40,6 +41,7 @@ The setup script will install these automatically:
 
 - `wireguard` & `wireguard-tools`
 - `python3`, `python3-pip`, `python3-venv`
+- `nodejs`, `npm` (via NodeSource)
 - `nginx`
 - `qrencode`
 - `git`, `curl`
@@ -55,6 +57,21 @@ Pillow>=10.0
 gunicorn>=21.0
 ```
 
+### Node.js Dependencies (for Tailwind CSS build)
+
+See [`package.json`](package.json):
+
+```json
+{
+  "devDependencies": {
+    "@tailwindcss/cli": "^4.0.0",
+    "tailwindcss": "^4.0.0"
+  }
+}
+```
+
+> **Note**: Node.js is only required during build time. The compiled CSS is served as a static file; Node.js is not needed at runtime.
+
 ---
 
 ## Project Structure
@@ -63,6 +80,8 @@ gunicorn>=21.0
 wireguard_server_admin/
 ├── README.md                          # This file
 ├── requirements.txt                   # Python dependencies
+├── package.json                       # Node.js dependencies (Tailwind)
+├── tailwind.config.js                 # Tailwind CSS configuration
 ├── wgadmin_project/                   # Django project root
 │   ├── manage.py                      # Django management script
 │   ├── wgadmin_project/               # Project settings
@@ -74,6 +93,9 @@ wireguard_server_admin/
 │   │   ├── models.py                  # Database models
 │   │   ├── forms.py                   # Form definitions
 │   │   ├── services/wireguard.py      # WireGuard service layer
+│   │   ├── static/wgadmin/css/        # Static CSS files
+│   │   │   ├── input.css              # Tailwind source (input)
+│   │   │   └── tailwind.css           # Compiled CSS (output)
 │   │   └── templates/                 # HTML templates
 │   ├── scripts/                       # Bash management scripts
 │   │   ├── wg_first_start.sh          # Initial server setup
@@ -87,8 +109,18 @@ wireguard_server_admin/
 │       ├── gunicorn.service           # Systemd service file
 │       ├── nginx.conf                 # Nginx configuration
 │       └── .env.example               # Environment template
-└── tailwind.config.js                 # Tailwind CSS config (CDN mode)
+└── node_modules/                      # npm packages (not in git)
 ```
+
+### Tailwind CSS Build
+
+The project uses Tailwind CSS v4 with a local build process:
+
+- **Source**: `wgadmin_project/wgadmin/static/wgadmin/css/input.css`
+- **Output**: `wgadmin_project/wgadmin/static/wgadmin/css/tailwind.css`
+- **Config**: `tailwind.config.js` (content paths for purging)
+
+The compiled CSS is committed to the repository for convenience, but should be rebuilt before deployment if templates change.
 
 ---
 
@@ -128,9 +160,71 @@ This project is licensed under the MIT License. See `LICENSE` for details.
 
 ---
 
+## Development Setup
+
+### Prerequisites
+
+- Python 3.11+
+- Node.js 18+ (LTS)
+- npm
+
+### Local Development
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/Prizrak4416/wgadmin.git
+cd wgadmin
+
+# 2. Create Python virtual environment
+python3 -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+
+# 3. Install Node.js dependencies (for Tailwind)
+npm install
+
+# 4. Start Tailwind in watch mode (separate terminal)
+npm run watch
+
+# 5. Configure environment
+cp wgadmin_project/deploy/.env.example .env
+# Edit .env with appropriate values for local development
+
+# 6. Run Django migrations
+cd wgadmin_project
+python manage.py migrate
+python manage.py createsuperuser
+
+# 7. Start development server
+python manage.py runserver
+```
+
+### Build Commands
+
+| Command | Description |
+|---------|-------------|
+| `npm run watch` | Start Tailwind in development mode (auto-rebuild on changes) |
+| `npm run build` | Build minified CSS for production |
+| `python manage.py collectstatic` | Collect static files to STATIC_ROOT |
+
+### Development Workflow
+
+1. Start `npm run watch` in a terminal
+2. Start `python manage.py runserver` in another terminal
+3. Edit templates — Tailwind will auto-rebuild CSS
+4. Refresh browser to see changes
+
+---
+
 ## Installation on Fresh Debian 12/13 Server
 
 ### Quick Start (Automated)
+
+The setup script (`wg_first_start.sh`) handles:
+- System package installation (including Node.js)
+- npm dependencies installation
+- Tailwind CSS build
+- Django static files collection
 
 ```bash
 sudo apt update && sudo apt upgrade -y
@@ -141,6 +235,7 @@ sudo git clone https://github.com/Prizrak4416/wgadmin.git /var/www/wgadmin
 cd /var/www/wgadmin
 
 # 2. Run the initial setup script (as root)
+# This installs Node.js, npm packages, builds Tailwind, and sets up WireGuard
 sudo bash wgadmin_project/scripts/wg_first_start.sh --user www-admin --interface wg0
 
 # 3. Create virtual environment and install dependencies
@@ -155,7 +250,9 @@ nano /var/www/wgadmin/.env
 cd wgadmin_project
 sudo -u www-admin /var/www/wgadmin/.venv/bin/python manage.py migrate
 sudo -u www-admin /var/www/wgadmin/.venv/bin/python manage.py createsuperuser
-sudo -u www-admin /var/www/wgadmin/.venv/bin/python manage.py collectstatic --noinput
+
+# Note: collectstatic is run by wg_first_start.sh, but you can run it again if needed:
+# sudo -u www-admin /var/www/wgadmin/.venv/bin/python manage.py collectstatic --noinput
 
 # 6. Set up systemd service
 sudo chown -R www-admin:wgadmin /var/www/wgadmin
@@ -181,6 +278,17 @@ sudo systemctl reload nginx
 sudo chown -R root:wgadmin /var/www/wgadmin/wgadmin_project/scripts
 sudo chmod -R 710 /var/www/wgadmin/wgadmin_project/scripts
 ```
+
+### Deployment Order
+
+When deploying updates, follow this order:
+
+1. **Pull latest code**: `git pull`
+2. **Install npm packages**: `npm ci` (or `npm install`)
+3. **Build Tailwind CSS**: `npm run build`
+4. **Collect static files**: `python manage.py collectstatic --noinput`
+5. **Run migrations**: `python manage.py migrate`
+6. **Restart application**: `sudo systemctl restart wgadmin`
 
 
 ### Service Management

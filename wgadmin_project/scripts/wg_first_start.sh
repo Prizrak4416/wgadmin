@@ -197,12 +197,126 @@ install_packages() {
         git
         curl
         iptables
+        ca-certificates
+        gnupg
     )
 
     log_info "Installing required packages: ${packages[*]}"
     DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "${packages[@]}"
 
     log_info "Packages installed successfully."
+}
+
+# ============================================================================
+# NODE.JS INSTALLATION
+# ============================================================================
+install_nodejs() {
+    log_info "Checking Node.js installation..."
+    
+    # Check if Node.js is already installed and version is adequate
+    if command_exists node; then
+        local node_version
+        node_version=$(node --version 2>/dev/null | sed 's/v//' | cut -d. -f1)
+        if [[ "${node_version}" -ge 18 ]]; then
+            log_info "Node.js v$(node --version) is already installed and meets requirements."
+            return 0
+        else
+            log_warn "Node.js v$(node --version) is installed but version 18+ is required. Upgrading..."
+        fi
+    fi
+    
+    log_info "Installing Node.js 20.x LTS via NodeSource..."
+    
+    # Create keyrings directory
+    mkdir -p /etc/apt/keyrings
+    
+    # Download and install NodeSource GPG key
+    if [[ ! -f /etc/apt/keyrings/nodesource.gpg ]]; then
+        curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg
+        log_info "NodeSource GPG key installed."
+    fi
+    
+    # Add NodeSource repository
+    local node_major=20
+    echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_${node_major}.x nodistro main" > /etc/apt/sources.list.d/nodesource.list
+    
+    # Update and install
+    apt-get update -qq
+    DEBIAN_FRONTEND=noninteractive apt-get install -y -qq nodejs
+    
+    # Verify installation
+    if command_exists node && command_exists npm; then
+        log_info "Node.js $(node --version) and npm $(npm --version) installed successfully."
+    else
+        die "Failed to install Node.js. Please install manually."
+    fi
+}
+
+# ============================================================================
+# TAILWIND CSS BUILD
+# ============================================================================
+build_tailwind() {
+    log_info "Building Tailwind CSS..."
+    
+    # Check if package.json exists
+    if [[ ! -f "${APP_HOME}/package.json" ]]; then
+        log_warn "package.json not found at ${APP_HOME}/package.json. Skipping Tailwind build."
+        return 0
+    fi
+    
+    # Change to app directory
+    cd "${APP_HOME}" || die "Failed to change to ${APP_HOME}"
+    
+    # Install npm dependencies
+    log_info "Installing npm dependencies..."
+    if [[ -f "package-lock.json" ]]; then
+        npm ci --silent 2>/dev/null || npm install --silent
+    else
+        npm install --silent
+    fi
+    
+    # Run Tailwind build
+    log_info "Running Tailwind CSS build..."
+    if npm run build 2>/dev/null; then
+        log_info "Tailwind CSS built successfully."
+    else
+        log_warn "Tailwind build failed or 'build' script not found. CSS may need manual building."
+    fi
+    
+    # Change back to original directory
+    cd - >/dev/null || true
+}
+
+# ============================================================================
+# DJANGO STATIC FILES
+# ============================================================================
+collect_static_files() {
+    log_info "Collecting Django static files..."
+    
+    local manage_py="${APP_HOME}/wgadmin_project/manage.py"
+    local venv_python="${APP_HOME}/.venv/bin/python"
+    
+    # Check if virtual environment exists
+    if [[ ! -f "${venv_python}" ]]; then
+        log_warn "Python virtual environment not found at ${APP_HOME}/.venv"
+        log_warn "Static files collection will be skipped. Run manually after creating venv:"
+        log_warn "  sudo -u ${WG_USER} ${venv_python} ${manage_py} collectstatic --noinput"
+        return 0
+    fi
+    
+    # Check if manage.py exists
+    if [[ ! -f "${manage_py}" ]]; then
+        log_warn "Django manage.py not found at ${manage_py}. Skipping collectstatic."
+        return 0
+    fi
+    
+    # Run collectstatic as the application user
+    if sudo -u "${WG_USER}" "${venv_python}" "${manage_py}" collectstatic --noinput 2>/dev/null; then
+        log_info "Static files collected successfully."
+    else
+        log_warn "collectstatic failed. This may be normal on first run before venv setup."
+        log_warn "Run manually: sudo -u ${WG_USER} ${venv_python} ${manage_py} collectstatic --noinput"
+    fi
 }
 
 # ============================================================================
@@ -431,8 +545,10 @@ setup_firewall() {
 # SUMMARY
 # ============================================================================
 print_summary() {
-    local server_ip
+    local server_ip node_ver npm_ver
     server_ip=$(ip -4 addr show scope global | awk '/inet / {print $2}' | cut -d/ -f1 | head -1)
+    node_ver=$(node --version 2>/dev/null || echo "not installed")
+    npm_ver=$(npm --version 2>/dev/null || echo "not installed")
 
     cat <<EOF
 
@@ -457,18 +573,35 @@ Configuration Summary:
 Server Information:
   - IP: ${server_ip}
   - WireGuard Port: ${WG_ENDPOINT_PORT}/udp
+  - Node.js: ${node_ver}
+  - npm: ${npm_ver}
+
+Build Status:
+  - Tailwind CSS: Built (if package.json was present)
+  - Static files: Run 'collectstatic' after creating Python venv
 
 Next Steps:
   1. If user ${WG_USER} was just added to group ${WG_GROUP}, start a new session (log out/in or run: newgrp ${WG_GROUP}).
-  2. Deploy the Django application (see README.md for instructions).
-  3. Configure nginx as reverse proxy.
-  4. Set environment variables for Django (.env file or systemd).
-  5. Test WireGuard: wg show ${WG_INTERFACE}
+  2. Create Python virtual environment:
+       sudo -u ${WG_USER} python3 -m venv ${APP_HOME}/.venv
+       sudo -u ${WG_USER} ${APP_HOME}/.venv/bin/pip install -r ${APP_HOME}/requirements.txt
+  3. Configure environment:
+       cp ${APP_HOME}/wgadmin_project/deploy/.env.example ${APP_HOME}/.env
+       nano ${APP_HOME}/.env
+  4. Initialize Django:
+       cd ${APP_HOME}/wgadmin_project
+       sudo -u ${WG_USER} ${APP_HOME}/.venv/bin/python manage.py migrate
+       sudo -u ${WG_USER} ${APP_HOME}/.venv/bin/python manage.py createsuperuser
+       sudo -u ${WG_USER} ${APP_HOME}/.venv/bin/python manage.py collectstatic --noinput
+  5. Configure nginx as reverse proxy.
+  6. Start the application service.
+  7. Test WireGuard: wg show ${WG_INTERFACE}
 
 IMPORTANT NOTES:
   - Review and edit ${WG_CONFIG_PATH} if the detected public interface (${WG_PUBLIC_INTERFACE}) is not correct.
   - Ensure firewall allows UDP port ${WG_ENDPOINT_PORT}.
   - The re-login is required for group membership to take effect.
+  - For CSS changes, rebuild Tailwind: cd ${APP_HOME} && npm run build
 
 ================================================================================
 EOF
@@ -515,15 +648,31 @@ main() {
     log_info "Starting WireGuard Admin setup..."
     log_info "User: ${WG_USER}, Interface: ${WG_INTERFACE}, Public interface: ${WG_PUBLIC_INTERFACE}"
 
+    # System setup
     install_packages
+    install_nodejs
+    
+    # User and directory setup
     setup_user_and_group
     setup_directories
     setup_permissions
     setup_sudoers
+    
+    # WireGuard setup
     setup_wireguard_service
     setup_firewall
-    print_summary
+    
+    # Application folder permissions
     setup_folder
+    
+    # Frontend build (Tailwind CSS)
+    build_tailwind
+    
+    # Django static files (may fail if venv not set up yet - that's OK)
+    collect_static_files
+    
+    # Summary
+    print_summary
 
     log_info "Setup completed successfully."
 }

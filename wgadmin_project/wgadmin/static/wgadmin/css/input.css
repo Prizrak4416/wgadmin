@@ -1,12 +1,79 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
 
+/* Custom theme configuration for Tailwind v4 */
+@theme {
+  --font-family-sans: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  
+  /* Custom colors */
+  --color-slateglass: rgba(15, 23, 42, 0.75);
+  --color-ink: #0b1221;
+  --color-accent: #22d3ee;
+}
+
+/* Base layer customizations */
 @layer base {
   body {
-    font-family: "Inter", system-ui, -apple-system, sans-serif;
-    background: radial-gradient(circle at 20% 20%, rgba(16,185,129,0.08), transparent 35%),
-                radial-gradient(circle at 80% 0%, rgba(79,70,229,0.07), transparent 25%),
+    font-family: var(--font-family-sans);
+    background: radial-gradient(circle at 20% 20%, rgba(16, 185, 129, 0.08), transparent 35%),
+                radial-gradient(circle at 80% 0%, rgba(79, 70, 229, 0.07), transparent 25%),
                 #020617;
+  }
+  
+  /* Ensure proper box sizing */
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+}
+
+/* Component layer for reusable patterns */
+@layer components {
+  /* Touch-friendly button base */
+  .btn-touch {
+    min-height: 44px;
+    min-width: 44px;
+    padding: 0.5rem 1rem;
+  }
+  
+  /* Card component */
+  .card {
+    @apply bg-slate-950/60 border border-slate-800 rounded-2xl;
+  }
+  
+  /* Input base styles */
+  .input-base {
+    @apply bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm transition-colors;
+    @apply focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/40 focus:outline-none;
+  }
+  
+  /* Action button base */
+  .btn-action {
+    @apply px-3 py-2 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap;
+    min-height: 36px;
+  }
+}
+
+/* Utility layer for custom utilities */
+@layer utilities {
+  /* Safe area padding for mobile */
+  .safe-area-inset {
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+  
+  /* Prevent text overflow */
+  .text-balance {
+    text-wrap: balance;
+  }
+  
+  /* Hide scrollbar but keep scroll functionality */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
   }
 }

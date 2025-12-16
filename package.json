@@ -3,10 +3,13 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "build:css": "tailwindcss -i wgadmin_project/wgadmin/static/wgadmin/css/input.css -o wgadmin_project/wgadmin/static/wgadmin/css/tailwind.css --minify",
-    "watch:css": "tailwindcss -i wgadmin_project/wgadmin/static/wgadmin/css/input.css -o wgadmin_project/wgadmin/static/wgadmin/css/tailwind.css --watch"
+    "build": "tailwindcss -i wgadmin_project/wgadmin/static/wgadmin/css/input.css -o wgadmin_project/wgadmin/static/wgadmin/css/tailwind.css --minify",
+    "watch": "tailwindcss -i wgadmin_project/wgadmin/static/wgadmin/css/input.css -o wgadmin_project/wgadmin/static/wgadmin/css/tailwind.css --watch",
+    "build:css": "npm run build",
+    "watch:css": "npm run watch"
   },
   "devDependencies": {
-    "tailwindcss": "next"
+    "@tailwindcss/cli": "^4.0.0",
+    "tailwindcss": "^4.0.0"
   }
 }
