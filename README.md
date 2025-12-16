@@ -254,19 +254,32 @@ sudo -u www-admin /var/www/wgadmin/.venv/bin/python manage.py createsuperuser
 # Note: collectstatic is run by wg_first_start.sh, but you can run it again if needed:
 # sudo -u www-admin /var/www/wgadmin/.venv/bin/python manage.py collectstatic --noinput
 
-# 6. Set up systemd service
+# 6. Set permissions for nginx and gunicorn
+# IMPORTANT: nginx (www-data) needs read access to static files
 sudo chown -R www-admin:wgadmin /var/www/wgadmin
-sudo find /var/www/wgadmin -type d -exec chmod 2770 {} \;
-sudo find /var/www/wgadmin -type f -exec chmod 660 {} \;
-sudo chmod 770 /var/www/wgadmin/.venv/bin/gunicorn /var/www/wgadmin/.venv/bin/python
 
+# Directories: 755 for nginx traversal, files: 644 for read access
+sudo chmod 755 /var/www/wgadmin
+sudo chmod 755 /var/www/wgadmin/wgadmin_project
+sudo find /var/www/wgadmin/wgadmin_project/wgadmin/static -type d -exec chmod 755 {} \;
+sudo find /var/www/wgadmin/wgadmin_project/wgadmin/static -type f -exec chmod 644 {} \;
+
+# Virtual environment needs execute permissions
+sudo find /var/www/wgadmin/.venv -type d -exec chmod 755 {} \;
+sudo find /var/www/wgadmin/.venv/bin -type f -exec chmod 755 {} \;
+
+# Sensitive files: restrict to owner/group only
+sudo chmod 640 /var/www/wgadmin/.env 2>/dev/null || true
+sudo chmod 660 /var/www/wgadmin/wgadmin_project/db.sqlite3 2>/dev/null || true
+
+# 7. Set up systemd service
 sudo cp deploy/gunicorn.service /etc/systemd/system/wgadmin.service
 sudo mkdir -p /var/log/wgadmin
 sudo chown www-admin:wgadmin /var/log/wgadmin
 sudo systemctl daemon-reload
 sudo systemctl enable --now wgadmin
 
-# 7. Configure nginx
+# 8. Configure nginx
 sudo cp deploy/nginx.conf /etc/nginx/sites-available/wgadmin
 sudo ln -s /etc/nginx/sites-available/wgadmin /etc/nginx/sites-enabled/
 sudo rm -f /etc/nginx/sites-enabled/default
@@ -274,9 +287,10 @@ sudo rm -f /etc/nginx/sites-enabled/default
 sudo nginx -t
 sudo systemctl reload nginx
 
-# final
+# 9. Scripts directory - restricted to root and wgadmin group
 sudo chown -R root:wgadmin /var/www/wgadmin/wgadmin_project/scripts
-sudo chmod -R 710 /var/www/wgadmin/wgadmin_project/scripts
+sudo chmod 750 /var/www/wgadmin/wgadmin_project/scripts
+sudo chmod 750 /var/www/wgadmin/wgadmin_project/scripts/*.sh
 ```
 
 ### Deployment Order

@@ -611,9 +611,41 @@ EOF
 # SETUP FOLDER
 # ============================================================================
 setup_folder() {
+    log_info "Setting up application folder permissions..."
+    
+    # Set ownership of app home
     chown -R "${WG_USER}:${WG_GROUP}" "${APP_HOME}"
-
-    # Scripts directory permissions
+    
+    # -------------------------------------------------------------------------
+    # Application directories need to be readable by nginx (www-data)
+    # Use 755 for directories so nginx can traverse them to serve static files
+    # Use 644 for regular files, 660 for sensitive files
+    # -------------------------------------------------------------------------
+    
+    # APP_HOME and wgadmin_project directories - nginx needs to traverse these
+    chmod 755 "${APP_HOME}"
+    chmod 755 "${APP_HOME}/wgadmin_project" 2>/dev/null || true
+    
+    # Static files directory - nginx needs read access
+    local static_dir="${APP_HOME}/wgadmin_project/wgadmin/static"
+    if [[ -d "${static_dir}" ]]; then
+        log_info "Setting static files permissions for nginx access..."
+        find "${static_dir}" -type d -exec chmod 755 {} +
+        find "${static_dir}" -type f -exec chmod 644 {} +
+    fi
+    
+    # STATIC_ROOT if it exists (after collectstatic)
+    local static_root="${APP_HOME}/staticfiles"
+    if [[ -d "${static_root}" ]]; then
+        find "${static_root}" -type d -exec chmod 755 {} +
+        find "${static_root}" -type f -exec chmod 644 {} +
+    fi
+    
+    # -------------------------------------------------------------------------
+    # Sensitive directories - restrict access to group only
+    # -------------------------------------------------------------------------
+    
+    # Scripts directory - only root and wgadmin group
     if [[ -d "${SCRIPT_DIR}" ]]; then
         chown root:"${WG_GROUP}" "${SCRIPT_DIR}"
         chmod 750 "${SCRIPT_DIR}"
@@ -626,7 +658,34 @@ setup_folder() {
             fi
         done
     fi
-
+    
+    # .env file - sensitive, only owner and group
+    if [[ -f "${APP_HOME}/.env" ]]; then
+        chown "${WG_USER}:${WG_GROUP}" "${APP_HOME}/.env"
+        chmod 640 "${APP_HOME}/.env"
+    fi
+    
+    # Virtual environment - group access for execution
+    if [[ -d "${APP_HOME}/.venv" ]]; then
+        find "${APP_HOME}/.venv" -type d -exec chmod 755 {} +
+        find "${APP_HOME}/.venv" -type f -exec chmod 644 {} +
+        # Make bin files executable
+        find "${APP_HOME}/.venv/bin" -type f -exec chmod 755 {} + 2>/dev/null || true
+    fi
+    
+    # Database file - restrict access
+    if [[ -f "${APP_HOME}/wgadmin_project/db.sqlite3" ]]; then
+        chown "${WG_USER}:${WG_GROUP}" "${APP_HOME}/wgadmin_project/db.sqlite3"
+        chmod 660 "${APP_HOME}/wgadmin_project/db.sqlite3"
+    fi
+    
+    # node_modules - read access for npm scripts, no sensitive data
+    if [[ -d "${APP_HOME}/node_modules" ]]; then
+        find "${APP_HOME}/node_modules" -type d -exec chmod 755 {} +
+        find "${APP_HOME}/node_modules" -type f -exec chmod 644 {} +
+    fi
+    
+    log_info "Application folder permissions configured."
 }
 
 # ============================================================================
