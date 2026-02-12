@@ -58,3 +58,33 @@ class AuditLog(models.Model):
 
     def __str__(self) -> str:
         return f"{self.action} {self.client_identifier} at {self.created_at.isoformat()}"
+
+
+class TrafficSnapshot(models.Model):
+    """Снимок трафика клиента WireGuard в определенный момент времени."""
+
+    timestamp = models.DateTimeField(auto_now_add=True, db_index=True)
+    public_key = models.CharField(max_length=44, db_index=True)  # Base64 encoded WG pubkey
+    client_name = models.CharField(max_length=255, blank=True, default="")
+
+    rx_bytes = models.BigIntegerField(help_text="Полученные байты (cumulative)")
+    tx_bytes = models.BigIntegerField(help_text="Отправленные байты (cumulative)")
+    total_bytes = models.BigIntegerField(help_text="rx_bytes + tx_bytes")
+
+    class Meta:
+        ordering = ["-timestamp"]
+        indexes = [
+            models.Index(fields=["public_key", "-timestamp"]),
+            models.Index(fields=["-timestamp"]),
+        ]
+        verbose_name = "Traffic Snapshot"
+        verbose_name_plural = "Traffic Snapshots"
+
+    def __str__(self) -> str:
+        display_name = self.client_name or self.public_key[:8]
+        return f"{display_name} @ {self.timestamp}"
+
+    def save(self, *args, **kwargs):
+        if self.total_bytes is None:
+            self.total_bytes = self.rx_bytes + self.tx_bytes
+        super().save(*args, **kwargs)

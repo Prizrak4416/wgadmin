@@ -8,6 +8,7 @@ IDENTIFIER_PATTERN = r"[A-Za-z0-9._+=-]+"
 
 urlpatterns = [
     path("", views.client_list, name="clients"),
+    path("traffic/", views.traffic_stats, name="traffic-stats"),
     path("clients/create/", views.create_client, name="client-create"),
     re_path(
         rf"^clients/(?P<identifier>{IDENTIFIER_PATTERN})/enable/$",

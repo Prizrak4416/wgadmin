@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "deny": [
+      "Read(./.venv/**)",
+      "Read(./wgadmin_project/.env)",
+      "Read(./**/*.sqlite3)",
+      "Read(./**/*.pyc)",
+      "Read(./**/*.pyo)",
+      "Read(./**/*.pyd)",
+      "Read(./**/*.log)",
+      "Read(./**/*.tmp)",
+      "Read(./.codexignore)",
+      "Read(./.rooignore)",
+      "Read(./**/.env)",
+      "Read(./node_modules/**)",
+      "Read(./wgadmin_project/scripts/log.txt)",
+      "Read(./wgadmin_project/scripts/temp/**)"
+    ]
+  }
+}

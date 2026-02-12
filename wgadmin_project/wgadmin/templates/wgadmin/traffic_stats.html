@@ -1,0 +1,204 @@
+{% extends "wgadmin/base.html" %}
+{% block content %}
+<div class="space-y-6">
+    <!-- Header with navigation -->
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+            <div class="flex items-center gap-3">
+                <a href="{% url 'clients' %}" class="text-slate-400 hover:text-slate-200 transition-colors">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+                    </svg>
+                </a>
+                <h1 class="text-xl sm:text-2xl font-semibold">Traffic Statistics</h1>
+            </div>
+            <p class="text-slate-400 text-sm mt-1">Monitor bandwidth usage by client</p>
+        </div>
+
+        <!-- Period filter -->
+        <div class="flex flex-wrap gap-2">
+            <a href="?period=hour"
+               class="px-3 py-2 rounded-lg text-sm font-medium transition-colors min-h-[44px] flex items-center
+                      {% if period == 'hour' %}bg-emerald-500/20 text-emerald-200 border border-emerald-500/30{% else %}bg-slate-800 text-slate-300 hover:bg-slate-700{% endif %}">
+                Hour
+            </a>
+            <a href="?period=day"
+               class="px-3 py-2 rounded-lg text-sm font-medium transition-colors min-h-[44px] flex items-center
+                      {% if period == 'day' %}bg-emerald-500/20 text-emerald-200 border border-emerald-500/30{% else %}bg-slate-800 text-slate-300 hover:bg-slate-700{% endif %}">
+                Day
+            </a>
+            <a href="?period=week"
+               class="px-3 py-2 rounded-lg text-sm font-medium transition-colors min-h-[44px] flex items-center
+                      {% if period == 'week' %}bg-emerald-500/20 text-emerald-200 border border-emerald-500/30{% else %}bg-slate-800 text-slate-300 hover:bg-slate-700{% endif %}">
+                Week
+            </a>
+            <a href="?period=month"
+               class="px-3 py-2 rounded-lg text-sm font-medium transition-colors min-h-[44px] flex items-center
+                      {% if period == 'month' %}bg-emerald-500/20 text-emerald-200 border border-emerald-500/30{% else %}bg-slate-800 text-slate-300 hover:bg-slate-700{% endif %}">
+                Month
+            </a>
+        </div>
+    </div>
+
+    <!-- Stats summary card -->
+    <div class="bg-slate-800/50 rounded-xl p-4 sm:p-6 border border-slate-700/50">
+        <div class="text-slate-400 text-sm">Total Traffic ({{ period }})</div>
+        <div class="text-2xl sm:text-3xl font-bold text-emerald-400 mt-1" id="total-traffic">
+            {{ total_traffic|filesizeformat }}
+        </div>
+    </div>
+
+    <!-- Chart -->
+    <div class="bg-slate-800/50 rounded-xl p-4 sm:p-6 border border-slate-700/50">
+        <h2 class="text-lg font-semibold mb-4">Traffic Over Time (Top 5 Clients)</h2>
+        <div class="relative" style="min-height: 300px;">
+            <canvas id="trafficChart"></canvas>
+            {% if not top_users %}
+                <div class="absolute inset-0 flex items-center justify-center text-slate-400">
+                    No traffic data available for this period
+                </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Top users table -->
+    <div class="bg-slate-800/50 rounded-xl overflow-hidden border border-slate-700/50">
+        <div class="p-4 sm:p-6 border-b border-slate-700/50">
+            <h2 class="text-lg font-semibold">Top 10 Users</h2>
+        </div>
+
+        {% if top_users %}
+            <!-- Desktop table -->
+            <div class="hidden sm:block overflow-x-auto">
+                <table class="w-full">
+                    <thead class="bg-slate-900/50 text-slate-300 text-sm">
+                        <tr>
+                            <th class="px-4 sm:px-6 py-3 text-left font-semibold">#</th>
+                            <th class="px-4 sm:px-6 py-3 text-left font-semibold">Client</th>
+                            <th class="px-4 sm:px-6 py-3 text-left font-semibold">Public Key</th>
+                            <th class="px-4 sm:px-6 py-3 text-right font-semibold">Traffic Used</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-700/50">
+                        {% for user in top_users %}
+                            <tr class="hover:bg-slate-700/30 transition-colors">
+                                <td class="px-4 sm:px-6 py-3 text-slate-400">{{ forloop.counter }}</td>
+                                <td class="px-4 sm:px-6 py-3 font-medium">{{ user.client_name|default:"Unknown" }}</td>
+                                <td class="px-4 sm:px-6 py-3 text-slate-400 font-mono text-xs">{{ user.public_key|slice:":20" }}...</td>
+                                <td class="px-4 sm:px-6 py-3 text-right">
+                                    <span class="px-2 py-1 bg-emerald-500/20 text-emerald-200 rounded text-sm">
+                                        {{ user.traffic_delta|filesizeformat }}
+                                    </span>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Mobile card view -->
+            <div class="sm:hidden divide-y divide-slate-700/50">
+                {% for user in top_users %}
+                    <div class="p-4 flex items-center justify-between gap-3">
+                        <div class="flex items-center gap-3 min-w-0">
+                            <span class="text-slate-500 text-sm w-6">{{ forloop.counter }}</span>
+                            <div class="min-w-0">
+                                <div class="font-medium truncate">{{ user.client_name|default:"Unknown" }}</div>
+                                <div class="text-xs text-slate-400 font-mono truncate">{{ user.public_key|slice:":16" }}...</div>
+                            </div>
+                        </div>
+                        <span class="shrink-0 px-2 py-1 bg-emerald-500/20 text-emerald-200 rounded text-sm">
+                            {{ user.traffic_delta|filesizeformat }}
+                        </span>
+                    </div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <div class="p-8 text-center text-slate-400">
+                No traffic data available for this period.
+                <br>
+                <span class="text-sm">Traffic stats are collected every 5 minutes.</span>
+            </div>
+        {% endif %}
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+(function() {
+    const chartData = {{ chart_data|safe }};
+    const ctx = document.getElementById('trafficChart');
+
+    if (!ctx || !chartData.datasets || chartData.datasets.length === 0) {
+        return;
+    }
+
+    new Chart(ctx, {
+        type: 'line',
+        data: chartData,
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: {
+                intersect: false,
+                mode: 'index'
+            },
+            plugins: {
+                legend: {
+                    position: 'top',
+                    labels: {
+                        color: '#94a3b8',
+                        usePointStyle: true,
+                        padding: 20
+                    }
+                },
+                tooltip: {
+                    backgroundColor: 'rgba(15, 23, 42, 0.9)',
+                    titleColor: '#f1f5f9',
+                    bodyColor: '#cbd5e1',
+                    borderColor: '#334155',
+                    borderWidth: 1,
+                    padding: 12,
+                    callbacks: {
+                        label: function(context) {
+                            let value = context.raw || 0;
+                            return context.dataset.label + ': ' + formatBytes(value);
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    grid: {
+                        color: 'rgba(51, 65, 85, 0.5)'
+                    },
+                    ticks: {
+                        color: '#94a3b8'
+                    }
+                },
+                y: {
+                    beginAtZero: true,
+                    grid: {
+                        color: 'rgba(51, 65, 85, 0.5)'
+                    },
+                    ticks: {
+                        color: '#94a3b8',
+                        callback: function(value) {
+                            return formatBytes(value);
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    function formatBytes(bytes) {
+        if (bytes === 0) return '0 B';
+        const k = 1024;
+        const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+    }
+})();
+</script>
+{% endblock %}

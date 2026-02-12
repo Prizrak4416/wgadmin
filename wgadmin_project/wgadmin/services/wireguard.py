@@ -259,3 +259,91 @@ class WireGuardService:
         if not config_path.exists():
             raise WireGuardError(f"Config file not found for {peer.identifier}: {config_path}")
         return config_path.read_text(encoding="utf-8")
+
+    def get_traffic_stats(self, period: str = "day") -> Dict:
+        """
+        Get aggregated traffic statistics for the specified period.
+
+        Args:
+            period: One of 'hour', 'day', 'week', 'month'
+
+        Returns:
+            Dictionary with traffic data for visualization:
+            {
+                'snapshots': List of snapshot dicts,
+                'by_client': Dict of client stats,
+                'total_traffic': int,
+                'period': str
+            }
+        """
+        from datetime import timedelta
+
+        from wgadmin.models import TrafficSnapshot
+
+        now = timezone.now()
+        period_map = {
+            "hour": timedelta(hours=1),
+            "day": timedelta(days=1),
+            "week": timedelta(days=7),
+            "month": timedelta(days=30),
+        }
+        delta = period_map.get(period, timedelta(days=1))
+        start_time = now - delta
+
+        snapshots = TrafficSnapshot.objects.filter(timestamp__gte=start_time).order_by(
+            "public_key", "timestamp"
+        )
+
+        if not snapshots.exists():
+            return {
+                "snapshots": [],
+                "by_client": [],
+                "total_traffic": 0,
+                "period": period,
+            }
+
+        # Group by client and calculate traffic deltas
+        by_client: Dict[str, Dict] = {}
+        prev_by_key: Dict[str, int] = {}
+
+        for snap in snapshots:
+            key = snap.public_key
+            name = snap.client_name or key[:8]
+
+            if key not in by_client:
+                by_client[key] = {
+                    "client_name": name,
+                    "public_key": key,
+                    "traffic_delta": 0,
+                    "snapshots": [],
+                }
+
+            # Calculate delta (difference from previous snapshot for this peer)
+            prev_total = prev_by_key.get(key, snap.total_bytes)
+            delta_bytes = max(0, snap.total_bytes - prev_total)
+            prev_by_key[key] = snap.total_bytes
+
+            by_client[key]["traffic_delta"] += delta_bytes
+            by_client[key]["snapshots"].append(
+                {
+                    "timestamp": snap.timestamp.isoformat(),
+                    "rx_bytes": snap.rx_bytes,
+                    "tx_bytes": snap.tx_bytes,
+                    "total_bytes": snap.total_bytes,
+                    "delta": delta_bytes,
+                }
+            )
+
+        # Sort by traffic (descending)
+        sorted_clients = sorted(
+            by_client.values(), key=lambda x: x["traffic_delta"], reverse=True
+        )
+
+        total_traffic = sum(c["traffic_delta"] for c in sorted_clients)
+
+        return {
+            "snapshots": list(snapshots.values("timestamp", "public_key", "client_name", "total_bytes")),
+            "by_client": sorted_clients,
+            "total_traffic": total_traffic,
+            "period": period,
+        }

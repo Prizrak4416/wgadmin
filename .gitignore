@@ -5,6 +5,10 @@ __pycache__/
 db.sqlite3
 *.log
 *.tmp
+CLAUDE.md
+CHANGELOG_TRAFFIC_MONITORING.md
+TRAFFIC_MONITORING_SPEC.md
+./claude
 
 node_modules/
 .env

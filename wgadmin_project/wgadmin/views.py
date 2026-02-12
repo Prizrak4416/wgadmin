@@ -307,3 +307,63 @@ def _cleanup_tokens() -> None:
     deleted_count, _ = ConfigDownloadToken.objects.filter(created_at__lt=cutoff).delete()
     if deleted_count:
         logger.info("Deleted %d old tokens", deleted_count)
+
+
+@staff_required
+def traffic_stats(request: HttpRequest) -> HttpResponse:
+    """Traffic statistics page with charts and top users."""
+    import json
+
+    period = request.GET.get("period", "day")
+    if period not in ("hour", "day", "week", "month"):
+        period = "day"
+
+    wg_service = WireGuardService()
+    stats = wg_service.get_traffic_stats(period=period)
+
+    # Prepare chart data for Chart.js
+    by_client = stats.get("by_client", [])
+    top_users = by_client[:10]
+
+    # Build time series data for chart
+    chart_data = {"labels": [], "datasets": []}
+    if by_client:
+        # Collect all unique timestamps
+        all_timestamps = set()
+        for client in by_client[:5]:  # Limit to top 5 for chart readability
+            for snap in client.get("snapshots", []):
+                all_timestamps.add(snap["timestamp"])
+
+        sorted_timestamps = sorted(all_timestamps)
+        chart_data["labels"] = [ts[11:16] for ts in sorted_timestamps]  # HH:MM format
+
+        colors = [
+            "rgba(16, 185, 129, 0.8)",  # emerald
+            "rgba(59, 130, 246, 0.8)",  # blue
+            "rgba(245, 158, 11, 0.8)",  # amber
+            "rgba(239, 68, 68, 0.8)",  # red
+            "rgba(139, 92, 246, 0.8)",  # purple
+        ]
+
+        for idx, client in enumerate(by_client[:5]):
+            # Map timestamps to delta values
+            ts_to_delta = {s["timestamp"]: s["delta"] for s in client.get("snapshots", [])}
+            data = [ts_to_delta.get(ts, 0) for ts in sorted_timestamps]
+            chart_data["datasets"].append(
+                {
+                    "label": client["client_name"],
+                    "data": data,
+                    "borderColor": colors[idx % len(colors)],
+                    "backgroundColor": colors[idx % len(colors)].replace("0.8", "0.2"),
+                    "fill": True,
+                    "tension": 0.4,
+                }
+            )
+
+    context = {
+        "period": period,
+        "chart_data": json.dumps(chart_data),
+        "top_users": top_users,
+        "total_traffic": stats.get("total_traffic", 0),
+    }
+    return render(request, "wgadmin/traffic_stats.html", context)
